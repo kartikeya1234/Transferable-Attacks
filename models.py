@@ -33,15 +33,5 @@ class DNN(torch.nn.Module):
     def forward(self,input):
         return self.model(input)
 
-class LR(torch.nn.Module):
 
-    def __init__(self, inputDim,  outputDim):
-        super().__init__()
-        self.inputDim = inputDim
-        self.outputDim = outputDim
-        self.model = torch.nn.Sequential(
-                            torch.nn.Linear(self.inputDim, self.outputDim, bias=True)
-                            )
 
-    def forward(self, input):
-        return self.model(input)
