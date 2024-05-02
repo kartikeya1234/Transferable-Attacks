@@ -49,28 +49,28 @@ def IntraModelTransfer(trainingFeatures,
                        testFeatures,
                        testLabels, 
                        modelType,
-                       numModelsReplicas):
+                       numModelInstances):
     
     print("================================================================================================================")
-    print(f"Conducting Intra Model Transferability for model {modelType} with {numModelsReplicas} replicas.")
-
+    print(f"Conducting Intra Model Transferability for model {modelType} with {numModelInstances} replicas.")
+    print("================================================================================================================")
 
     if modelType == 'NN':
         dataSplitsDict = GetNSplits(features=trainingFeatures,
                                     labels=trainingLabels,
-                                    nSplits=numModelsReplicas,
+                                    nSplits=numModelInstances,
                                     isNN=True)
     else: 
         dataSplitsDict = GetNSplits(features=trainingFeatures,
                                     labels=trainingLabels,
-                                    nSplits=numModelsReplicas,
+                                    nSplits=numModelInstances,
                                     isNN=False)
     
     trainedModelsDict = {}
     
     print(f"Training the models now.")
     # Training the models
-    for i in range(numModelsReplicas):
+    for i in range(numModelInstances):
         
         print(f"Training Model {i+1}.")
 
@@ -78,7 +78,7 @@ def IntraModelTransfer(trainingFeatures,
         Y = dataSplitsDict[i][1]
 
         if modelType != 'NN':
-            if modelType == 'RandomForest':
+            if modelType == 'RF':
                 from sklearn.ensemble import RandomForestClassifier
                 
                 model = RandomForestClassifier(n_estimators=100)
@@ -90,7 +90,7 @@ def IntraModelTransfer(trainingFeatures,
                 model = SVC(kernel='linear')
                 model.fit(X, Y)
 
-            elif modelType == 'XGBoost':
+            elif modelType == 'XGB':
                 from xgboost import XGBClassifier
 
                 model = XGBClassifier()
@@ -108,6 +108,15 @@ def IntraModelTransfer(trainingFeatures,
                 model = LogisticRegression()
                 model.fit(X, Y)
 
+            elif modelType == 'DT':
+                from sklearn.tree import DecisionTreeClassifier
+
+                model = DecisionTreeClassifier()
+                model.fit(X, Y)
+
+            else:
+                raise NotImplementedError(f"{modelType} not implemented.")
+        
         else:
             data = CustomDataset(X=X, Y=Y)
             trainDataLoader = DataLoader(dataset=data, batch_size=30, shuffle=True)
@@ -156,8 +165,8 @@ def IntraModelTransfer(trainingFeatures,
         if modelType != 'NN':
             pred = model.predict(testFeatures)
             accuracy = accuracy_score(testLabels, pred)
-
-            print(f"Accuracy for {modelIndex} on test set is {accuracy:.2f}%")
+            
+            print(f"Accuracy for {modelIndex} on test set is {accuracy * 100:.2f}%")
 
         else:
             with torch.no_grad():
@@ -185,5 +194,5 @@ if __name__ == '__main__':
     XScaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'LR',2)
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'GNB',5)
 
