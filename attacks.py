@@ -14,7 +14,7 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=10, device='cuda:0') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=10, device='cpu') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
         self.numIters = numIters
@@ -26,11 +26,10 @@ class L1_MAD_attack(Attack):
 
         entire_X = self.X
 
-        X_pert = entire_X.clone() + 0.01 * torch.rand_like(entire_X)
-        X_pert.requires_grad = True
+        X_pert = torch.tensor(entire_X.clone() + 0.01 * torch.rand_like(entire_X), requires_grad=True)
         X_pert = X_pert.to(self.device)
             
-        y_target = torch.zeros(entire_X.shape[0])
+        y_target = 1 - self.Y
         y_target = y_target.to(self.device)
         
 
@@ -39,20 +38,21 @@ class L1_MAD_attack(Attack):
         for param in self.model.parameters():
             param.requires_grad = False
 
-        print(f'Performing attack on the dataset for {self.numIters} epochs with the initial value of lambda as {lamb}.')
+        print(f'Performing attack on the dataset for {self.numIters} epochs with the initial value of lambda as {self.lamb}.')
         pert_bar = tqdm(range(self.numIters))
 
         for i in pert_bar:
 
             X_pert.requires_grad = True
 
-            adv_logits = self.model(X_pert).squeeze()
-            loss = adv_loss(lamb=lamb,
+            adv_logits = self.model(X_pert)
+            print(adv_logits.shape)
+            print(y_target.shape)
+            loss = adv_loss(lamb=self.lamb,
                                      adv_logits=adv_logits,
                                      y_target=y_target,
                                      x_orig=entire_X,
                                      x_pert=X_pert,
-                                     method='L1_MAD'
                                     )
 
             adv_optimizer.zero_grad()
@@ -86,6 +86,7 @@ class SAIF(Attack):
                  numIters=10, 
                  targeted=False, 
                  device='cpu') -> None:
+
         super().__init__(model, X, Y, targeted, device)
         self.numIters = numIters
         self.lossFunction = lossFunction
@@ -107,17 +108,21 @@ class SAIF(Attack):
         input_clone = entire_X.clone()
         input_clone.requires_grad = True
 
-        y_target = torch.zeros(entire_X.shape[0])
+        if not self.targeted:
+            y_target = 1 - self.Y.clone()
+        else:
+            y_target = 1 - self.Y.clone()
+
         y_target = y_target.to(self.device)
 
         out = self.model(input_clone)
-        loss = -self.lossFunction(out,y_target.reshape(-1,1))
+        loss = -self.lossFunction(out,y_target)
         loss.backward()
 
         p = -self.eps * input_clone.grad.sign()
         p = p.detach()
     
-        kSmallest = torch.topk(-input_clone.grad,k = k,dim = 1)[1]
+        kSmallest = torch.topk(-input_clone.grad,k = self.k,dim = 1)[1]
         kSmask = torch.zeros_like(input_clone.grad,device = self.device)
         kSmask.scatter_(1,kSmallest,1)
         s = kSmask.detach().float()
@@ -131,12 +136,12 @@ class SAIF(Attack):
 
             s.requires_grad = True
             p.requires_grad = True
-            out = self.model(entire_X + mask*s*p).squeeze()
+            out = self.model(entire_X + mask*s*p)
 
             if self.targeted:
                 loss = self.lossFunction(out,y_target)
             else: 
-                loss = -self.lossFunction(out,y_target)
+                loss = self.lossFunction(out,y_target)
 
             loss.backward()
 
@@ -147,14 +152,16 @@ class SAIF(Attack):
 
                 v = -self.eps * mp.sign()
                 
-                kSmallest = torch.topk(-ms,k = k,dim = 1)[1]
+                kSmallest = torch.topk(-ms,k = self.k,dim = 1)[1]
                 kSmask = torch.zeros_like(ms,device = self.device)
                 kSmask.scatter_(1,kSmallest,1)
                 
                 z = torch.logical_and(kSmask, ms < 0).float()
 
                 mu = 1 / (2 ** r * math.sqrt(epoch + 1))
-                while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1,1)) > loss:
+                while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target) > loss:
+                    print(self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target))
+                    print(loss)
                     r += 1
                     mu = 1 / (2 ** r * math.sqrt(epoch + 1))
 
@@ -164,7 +171,7 @@ class SAIF(Attack):
                 X_adv = torch.clamp(entire_X + p, 0,1)
                 p = X_adv - entire_X
                 
-                succCfIndexes = self.model(entire_X + s*p).round().squeeze() == y_target
+                succCfIndexes = self.model(entire_X + s*p).argmax(dim=1) != y_target
                 mask[succCfIndexes] = 0.0
 
             epochs_bar.set_postfix(loss = float(loss))
@@ -179,7 +186,7 @@ class SAIF(Attack):
 
         with torch.no_grad():
             X_adv_pred = torch.round(self.model(X_adv))
-            print(f"Number of successful counterfactuals : {torch.sum(X_adv_pred.squeeze() == y_target)} / {entire_X.shape[0]}")
+            print(f"Number of successful counterfactuals : {torch.sum(X_adv_pred.argmax(dim=1) == y_target)} / {entire_X.shape[0]}")
         
         X_adv = X_adv.detach()
         return X_adv 
