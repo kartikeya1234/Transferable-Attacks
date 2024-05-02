@@ -1,11 +1,11 @@
 import math
 import torch
 from tqdm import tqdm
-
+from utils import adv_loss
 
 
 class Attack:
-    def __init__(self, model, X, Y, targeted=False, device='cuda:0') -> None:
+    def __init__(self, model, X, Y, targeted=False, device='cpu') -> None:
         self.model = model
         self.X = X
         self.Y = Y
@@ -14,12 +14,10 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, optim, lossFunction, targeted=False, numIters=10, device='cuda:0') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=10, device='cuda:0') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
-        self.optim = optim
         self.numIters = numIters
-        self.lossFunction = lossFunction
 
     
     def attack(self):
@@ -49,7 +47,7 @@ class L1_MAD_attack(Attack):
             X_pert.requires_grad = True
 
             adv_logits = self.model(X_pert).squeeze()
-            loss = self.lossFunction(lamb=lamb,
+            loss = adv_loss(lamb=lamb,
                                      adv_logits=adv_logits,
                                      y_target=y_target,
                                      x_orig=entire_X,
@@ -87,8 +85,8 @@ class SAIF(Attack):
                  k=4, 
                  numIters=10, 
                  targeted=False, 
-                 device='cuda:0') -> None:
-        super().__init__(model, X, Y, numIters, targeted, device)
+                 device='cpu') -> None:
+        super().__init__(model, X, Y, targeted, device)
         self.numIters = numIters
         self.lossFunction = lossFunction
         self.eps = eps
@@ -113,7 +111,7 @@ class SAIF(Attack):
         y_target = y_target.to(self.device)
 
         out = self.model(input_clone)
-        loss = -self.loss_fn(out,y_target.reshape(-1,1))
+        loss = -self.lossFunction(out,y_target.reshape(-1,1))
         loss.backward()
 
         p = -self.eps * input_clone.grad.sign()
@@ -150,7 +148,7 @@ class SAIF(Attack):
                 v = -self.eps * mp.sign()
                 
                 kSmallest = torch.topk(-ms,k = k,dim = 1)[1]
-                kSmask = torch.zeros_like(ms,device = device)
+                kSmask = torch.zeros_like(ms,device = self.device)
                 kSmask.scatter_(1,kSmallest,1)
                 
                 z = torch.logical_and(kSmask, ms < 0).float()
