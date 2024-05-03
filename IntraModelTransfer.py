@@ -79,7 +79,7 @@ def IntraModelTransfer(trainingFeatures,
     # Training the models
     for i in range(numModelInstances):
         
-        print(f"Training Model {i+1}.")
+        print(f"Training Model {i+1}")
 
         X = dataSplitsDict[i][0]
         Y = dataSplitsDict[i][1]
@@ -257,5 +257,5 @@ if __name__ == '__main__':
     XScaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.3, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'XGB',5,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'GNB',5,NNAttackMethod='SAIF')
 
