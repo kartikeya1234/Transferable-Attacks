@@ -29,12 +29,38 @@ class DNN(torch.nn.Module):
                               torch.nn.Linear(
                                               in_features=20,
                                               out_features=self.outputShape,
-                                              ), 
+                                              ),
+                              torch.nn.Sigmoid() 
                      )
 
     def forward(self,input):
         return self.model(input)
-    
+
+    def selfTrain(self, dataloader):
+        optim = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3)
+        lossFunction = torch.nn.BCELoss()
+        numEpochs = 200
+
+        self.model.train()
+
+        for epoch in  range(numEpochs):
+
+            runningLoss =  0
+            for _, (x, y) in enumerate(dataloader):
+                pred = self.model(x)
+                loss = lossFunction(pred, y.unsqueeze(1))
+                    
+                for param in self.model.parameters():
+                    param.grad = None
+                    
+                loss.backward()
+                optim.step()
+
+                runningLoss += loss.item() * x.size(0)
+                
+            print(f"Epoch {epoch+1} | Training Loss = {runningLoss/len(dataloader.dataset):.4f}")
+
+
     def selfAttack(self, X, Y):
         if self.attackMethod == 'SAIF':
             

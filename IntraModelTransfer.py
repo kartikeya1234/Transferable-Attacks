@@ -5,7 +5,16 @@ from art.attacks.evasion import DecisionTreeAttack
 
 from sklearn.model_selection import KFold
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from scipy.stats import randint
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -43,7 +52,7 @@ def GetNSplits(features,
 
         if isNN:
             splitFeatures = torch.tensor(splitFeatures, dtype=torch.float32)
-            splitLabels = torch.tensor(splitLabels, dtype=torch.long)
+            splitLabels = torch.tensor(splitLabels, dtype=torch.float32)
 
         dataSplitsDict[i] = [splitFeatures, splitLabels]
 
@@ -61,6 +70,46 @@ def IntraModelTransfer(trainingFeatures,
     print("================================================================================================================")
     print(f"Conducting Intra Model Transferability for model {modelType} with {numModelInstances} instances.")
     print("================================================================================================================")
+
+    hyperparameters = {
+        'LR' : {
+            'logisticregression__solver' : ['newton-cg', 'lbfgs', 'saga'],
+            'logisticregression__C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+        },
+        'GNB' : {
+            'var_smoothing': np.logspace(0,-9, num=100)
+        },
+        'SVM' : {
+            'C': [0.1, 1, 10, 100, 1000],
+            'gamma': [1, 0.1, 0.01, 0.001, 0.0001]
+        },
+        'XGB' : {
+            'n_estimators': [50, 100, 300, 500, 1000],
+            'learning_rate' : [0.001, 0.01, 0.1, 0.2, 0.3],
+            'max_depth': [1, 3, 5, 7, 10, 15]
+        },
+        'DT' : {
+            "max_depth": [3, None],
+            "max_features": randint(1, 8),
+            "min_samples_leaf": randint(1, 9),
+            "criterion": ["gini", "entropy"]
+        },
+        'KNN' : {
+            'n_neighbors': [3, 5, 7, 9, 11],
+            'weights': ['uniform', 'distance'],
+            'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
+            'p': [1, 2]  # For Minkowski distance
+        }
+    }
+
+    pipelines = {
+        'LR' : LogisticRegression(), 
+        'GNB' : GaussianNB(),
+        'SVM' : SVC(kernel='rbf'), 
+        'XGB' : XGBClassifier(n_jobs=4),
+        'DT' : DecisionTreeClassifier(),
+        'KNN' : KNeighborsClassifier()
+    }
 
     if modelType == 'NN':
         dataSplitsDict = GetNSplits(features=trainingFeatures,
@@ -86,40 +135,52 @@ def IntraModelTransfer(trainingFeatures,
 
         if modelType != 'NN':
             
-            if modelType == 'SVM':
-                from sklearn.svm import SVC
+            if modelType == 'SVM':   
 
-                model = SVC(kernel='rbf')
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
             elif modelType == 'XGB':
-                from xgboost import XGBClassifier
 
-                model = XGBClassifier()
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
-            elif modelType == 'GNB':
-                from sklearn.naive_bayes import GaussianNB
+            elif modelType == 'GNB':                
 
-                model = GaussianNB()
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
-            elif modelType == 'LR':
-                from sklearn.linear_model import LogisticRegression
+            elif modelType == 'LR':                
 
-                model = LogisticRegression(max_iter=10)
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
-            elif modelType == 'DT':
-                from sklearn.tree import DecisionTreeClassifier
+            elif modelType == 'DT':                
 
-                model = DecisionTreeClassifier()
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
             elif modelType == 'KNN':
-                from sklearn.neighbors import KNeighborsClassifier
 
-                model = KNeighborsClassifier()
+                model = RandomizedSearchCV(pipelines[modelType], 
+                                           hyperparameters[modelType],
+                                           cv=5,
+                                           n_jobs=-1)
                 model.fit(X, Y)
 
             else:
@@ -127,37 +188,10 @@ def IntraModelTransfer(trainingFeatures,
         
         else:
             data = CustomDataset(X=X, Y=Y)
-            trainDataLoader = DataLoader(dataset=data, batch_size=30, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
             
-            if NNAttackMethod == 'SAIF':
-                model = DNN(input_shape=X.shape[1], output_shape=2)
-            else:
-                model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod='L1_MAD')
-
-            optim = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-3)
-            lossFunction = torch.nn.CrossEntropyLoss()
-            numEpochs = 200
-
-            model.train()
-
-            for epoch in  range(numEpochs):
-
-                runningLoss =  0
-                for _, (x, y) in enumerate(trainDataLoader):
-
-                    pred = model(x)
-                    loss = lossFunction(pred, y)
-                    
-                    for param in model.parameters():
-                        param.grad = None
-                    
-                    loss.backward()
-                    optim.step()
-
-                    runningLoss += loss.item() * x.size(0)
-
-                
-                print(f"Epoch {epoch+1} | Training Loss = {runningLoss/len(trainDataLoader.dataset):.4f}")
+            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod='L1_MAD')
+            model.selfTrain(dataloader=trainDataLoader)
 
         trainedModelsDict[f'Model_{i}'] = model
 
@@ -181,10 +215,9 @@ def IntraModelTransfer(trainingFeatures,
 
         else:
             with torch.no_grad():
-
                 pred = model(testFeatures)
                 
-                numCorrect = (torch.argmax(pred, dim=1) == testLabels).sum()
+                numCorrect = (pred.squeeze(1).round() == testLabels).sum()
                 numSamples = testFeatures.shape[0]
 
             print(f"Accuracy for {modelIndex} on test set is {numCorrect/numSamples * 100:.2f}%")
@@ -195,7 +228,8 @@ def IntraModelTransfer(trainingFeatures,
     for modelIndex in trainedModelsDict.keys():
         if modelType != 'NN':
             model = trainedModelsDict[modelIndex]
-        
+            print(type(model))
+
             if modelType not in ['XGB','DT']:
                 model = ScikitlearnClassifier(model=model)
             
@@ -255,7 +289,7 @@ if __name__ == '__main__':
     scaler = StandardScaler()
 
     XScaled = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.3, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'GNB',5,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',5,NNAttackMethod='SAIF')
 
