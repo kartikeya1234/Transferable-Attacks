@@ -64,7 +64,7 @@ class DNN(torch.nn.Module):
     def selfAttack(self, X, Y):
         if self.attackMethod == 'SAIF':
             
-            lossFunction = torch.nn.CrossEntropyLoss()
+            lossFunction = torch.nn.BCELoss()
             attackMethod=SAIF(model=self.model,
                               X=X,
                               Y=Y,
@@ -81,6 +81,8 @@ class DNN(torch.nn.Module):
 
         else:
             raise NotImplementedError(f"Attack method {self.attackMethod} not implemented.")
+        
+        return advX
 
 
 

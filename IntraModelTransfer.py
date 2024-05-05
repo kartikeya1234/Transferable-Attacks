@@ -1,6 +1,6 @@
 from art.estimators.classification.scikitlearn import ScikitlearnClassifier, ScikitlearnDecisionTreeClassifier
 from art.estimators.classification import XGBoostClassifier
-from art.attacks.evasion import HopSkipJump, FastGradientMethod
+from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
 from sklearn.model_selection import KFold
@@ -133,64 +133,19 @@ def IntraModelTransfer(trainingFeatures,
         X = dataSplitsDict[i][0]
         Y = dataSplitsDict[i][1]
 
-        if modelType != 'NN':
-            
-            if modelType == 'SVM':   
-
-                model = RandomizedSearchCV(pipelines[modelType], 
+        if modelType != 'NN':   
+            model = RandomizedSearchCV(pipelines[modelType], 
                                            hyperparameters[modelType],
                                            cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
+                                           n_jobs=2,
+                                           random_state=42)
+            model.fit(X, Y)
 
-            elif modelType == 'XGB':
-
-                model = RandomizedSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
-
-            elif modelType == 'GNB':                
-
-                model = RandomizedSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
-
-            elif modelType == 'LR':                
-
-                model = RandomizedSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
-
-            elif modelType == 'DT':                
-
-                model = RandomizedSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
-
-            elif modelType == 'KNN':
-
-                model = RandomizedSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=-1)
-                model.fit(X, Y)
-
-            else:
-                raise NotImplementedError(f"{modelType} model not implemented.")
-        
         else:
             data = CustomDataset(X=X, Y=Y)
             trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
             
-            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod='L1_MAD')
+            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.selfTrain(dataloader=trainDataLoader)
 
         trainedModelsDict[f'Model_{i}'] = model
@@ -201,7 +156,7 @@ def IntraModelTransfer(trainingFeatures,
 
     if modelType == 'NN':
         testFeatures = torch.tensor(testFeatures, dtype=torch.float32)
-        testLabels = torch.tensor(testLabels, dtype=torch.long)
+        testLabels = torch.tensor(testLabels, dtype=torch.float32)
 
 
     for modelIndex in trainedModelsDict.keys():
@@ -264,12 +219,12 @@ def IntraModelTransfer(trainingFeatures,
             
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
-                pred = model(advTestFeatures)
-
-                numCorrect = (torch.argmax(pred, dim=1) == testLabels).sum()
+                pred = evalModel(advTestFeatures)
+                
+                numCorrect = (pred.round().squeeze(1) == testLabels).sum()
                 numSamples = testFeatures.shape[0]
 
-                print(f"Accuracy of {testModelIndex} on adversarial inputs created for {modelIndex} is {numCorrect/numSamples*100:.2f}%")
+                print(f"Percentage of transferability to {testModelIndex} for adversarial inputs created for {modelIndex} is {(1 - numCorrect/numSamples)*100:.2f}%")
         print("================================================================================================================")
 
 
@@ -291,5 +246,5 @@ if __name__ == '__main__':
     XScaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',5,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'XGB',3,NNAttackMethod='L1_MAD')
 

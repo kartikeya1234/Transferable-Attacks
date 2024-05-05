@@ -46,8 +46,6 @@ class L1_MAD_attack(Attack):
             X_pert.requires_grad = True
 
             adv_logits = self.model(X_pert)
-            print(adv_logits.shape)
-            print(y_target.shape)
             loss = adv_loss(lamb=self.lamb,
                                      adv_logits=adv_logits,
                                      y_target=y_target,
@@ -62,7 +60,7 @@ class L1_MAD_attack(Attack):
             pert_bar.set_postfix(loss = float(loss))
 
             if i % 10 == 0:
-                lamb *= 1.9
+                self.lamb *= 1.9
             
         X_pert = X_pert.detach()
         X_pert = torch.where(X_pert > 1, torch.ones_like(X_pert), X_pert)
@@ -84,7 +82,7 @@ class SAIF(Attack):
                  eps=1.0, 
                  k=4, 
                  numIters=10, 
-                 targeted=False, 
+                 targeted=True, 
                  device='cpu') -> None:
 
         super().__init__(model, X, Y, targeted, device)
@@ -109,14 +107,14 @@ class SAIF(Attack):
         input_clone.requires_grad = True
 
         if not self.targeted:
-            y_target = 1 - self.Y.clone()
+            y_target = self.Y.clone()
         else:
             y_target = 1 - self.Y.clone()
 
         y_target = y_target.to(self.device)
 
         out = self.model(input_clone)
-        loss = -self.lossFunction(out,y_target)
+        loss = -self.lossFunction(out,y_target.reshape(-1,1))
         loss.backward()
 
         p = -self.eps * input_clone.grad.sign()
@@ -136,12 +134,12 @@ class SAIF(Attack):
 
             s.requires_grad = True
             p.requires_grad = True
-            out = self.model(entire_X + mask*s*p)
+            out = self.model(entire_X + mask*s*p).squeeze()
 
             if self.targeted:
                 loss = self.lossFunction(out,y_target)
             else: 
-                loss = self.lossFunction(out,y_target)
+                loss = -self.lossFunction(out,y_target)
 
             loss.backward()
 
@@ -159,11 +157,9 @@ class SAIF(Attack):
                 z = torch.logical_and(kSmask, ms < 0).float()
 
                 mu = 1 / (2 ** r * math.sqrt(epoch + 1))
-                while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target) > loss:
-                    print(self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target))
-                    print(loss)
+                while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)) > loss:
                     r += 1
-                    mu = 1 / (2 ** r * math.sqrt(epoch + 1))
+                    mu = 1. / (2 ** r * math.sqrt(epoch + 1))
 
                 p = p + mask * mu * (v - p)
                 s = s + mask * mu * (z - s)
