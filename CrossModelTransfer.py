@@ -1,4 +1,4 @@
-from art.estimators.classification.scikitlearn import ScikitlearnClassifier, ScikitlearnDecisionTreeClassifier
+from art.estimators.classification.scikitlearn import SklearnClassifier, ScikitlearnDecisionTreeClassifier
 from art.estimators.classification import XGBoostClassifier
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
@@ -34,7 +34,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN', 'LR', 'GNB','XGB','DT','KNN','SVM']
+    modelTypeList = ['NN', 'LR', 'GNB','DT','KNN','SVM','XGB']
     modelDict = {}
 
     hyperparameters = {
@@ -95,7 +95,7 @@ def CrossModelTransfer(trainingFeatures,
             model = RandomizedSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=2,
+                                           n_jobs=4,
                                            random_state=42)
             model.fit(trainingFeatures, trainingLabels)
 
@@ -119,6 +119,8 @@ def CrossModelTransfer(trainingFeatures,
             testFeaturesTensor = torch.tensor(testFeatures, dtype=torch.float32)
             testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32)
             
+            model.eval()
+
             with torch.no_grad():
                 pred = model(testFeaturesTensor)
                 
@@ -135,7 +137,7 @@ def CrossModelTransfer(trainingFeatures,
             model = modelDict[modelName]
 
             if modelName not in ['XGB','DT']:
-                model = ScikitlearnClassifier(model=model)
+                model = SklearnClassifier(model=model)
             
             elif modelName == 'XGB':
                 model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
@@ -179,10 +181,10 @@ def CrossModelTransfer(trainingFeatures,
                 else:
                     pred = evalModel(torch.tensor(advTestFeatures, dtype=torch.float32))
 
-                numCorrect = (pred.round().squeeze(1) == testLabelsTensor).sum()
+                numCorrect = (pred.round().squeeze(1) != testLabelsTensor).sum()
                 numSamples = testFeatures.shape[0]
 
-                print(f"Percentage of transferability to {evalModelName} for adversarial inputs created for {modelName} is {(1 - numCorrect/numSamples)*100:.2f}%")
+                print(f"Percentage of transferability to {evalModelName} for adversarial inputs created for {modelName} is {(numCorrect/numSamples)*100:.2f}%")
         print("================================================================================================================")
 
 
@@ -199,6 +201,6 @@ if __name__ == '__main__':
     scaler = MinMaxScaler()
 
     XScaled = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.3, random_state=42)
 
-    CrossModelTransfer(X_train, y_train, X_test, y_test,NNAttackMethod='L1_MAD')
+    CrossModelTransfer(X_train, y_train, X_test, y_test,NNAttackMethod='SAIF')

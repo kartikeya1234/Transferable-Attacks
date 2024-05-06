@@ -14,7 +14,7 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=10, device='cpu') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=500, device='cpu') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
         self.numIters = numIters
@@ -22,7 +22,7 @@ class L1_MAD_attack(Attack):
     
     def attack(self):
         print('======================================================================')
-        print('L1 weighted by MAD attack')
+        print('L1 weighted by MAD attack on NN')
 
         entire_X = self.X
 
@@ -33,7 +33,7 @@ class L1_MAD_attack(Attack):
         y_target = y_target.to(self.device)
         
 
-        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-3)
+        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-2)
         
         for param in self.model.parameters():
             param.requires_grad = False
@@ -81,8 +81,8 @@ class SAIF(Attack):
                  lossFunction, 
                  eps=1.0, 
                  k=4, 
-                 numIters=10, 
-                 targeted=True, 
+                 numIters=500, 
+                 targeted=False, 
                  device='cpu') -> None:
 
         super().__init__(model, X, Y, targeted, device)
@@ -94,7 +94,7 @@ class SAIF(Attack):
 
     def attack(self):
         print('======================================================================')
-        print('SAIF method')
+        print('SAIF method on NN')
 
         entire_X = self.X
         
@@ -157,9 +157,16 @@ class SAIF(Attack):
                 z = torch.logical_and(kSmask, ms < 0).float()
 
                 mu = 1 / (2 ** r * math.sqrt(epoch + 1))
-                while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)) > loss:
-                    r += 1
-                    mu = 1. / (2 ** r * math.sqrt(epoch + 1))
+
+                if self.targeted:
+                    while self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)) > loss:
+                        r += 1
+                        mu = 1. / (2 ** r * math.sqrt(epoch + 1))
+                else:
+                    while -self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)) > loss:
+                        print(-self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)))
+                        r += 1.
+                        mu = 1. / (2 ** r * math.sqrt(epoch + 1))
 
                 p = p + mask * mu * (v - p)
                 s = s + mask * mu * (z - s)
@@ -174,7 +181,7 @@ class SAIF(Attack):
 
             
             if (epoch + 1) % 150 == 0:
-                k += 1
+                self.k += 1
             
         X_adv = entire_X + s*p
         X_adv = torch.where(X_adv > 1, torch.ones_like(X_adv), X_adv)
@@ -182,7 +189,7 @@ class SAIF(Attack):
 
         with torch.no_grad():
             X_adv_pred = torch.round(self.model(X_adv))
-            print(f"Number of successful counterfactuals : {torch.sum(X_adv_pred.argmax(dim=1) == y_target)} / {entire_X.shape[0]}")
+            print(f"Number of successful counterfactuals : {torch.sum(X_adv_pred.squeeze() != y_target)} / {entire_X.shape[0]}")
         
         X_adv = X_adv.detach()
         return X_adv 

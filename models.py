@@ -76,7 +76,7 @@ class DNN(torch.nn.Module):
             attackMethod=L1_MAD_attack(model=self.model,
                                        X=X,
                                        Y=Y,
-                                       Lambda=1e-3)
+                                       Lambda=1e-10)
             advX = attackMethod.attack()
 
         else:

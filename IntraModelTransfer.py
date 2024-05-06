@@ -1,4 +1,4 @@
-from art.estimators.classification.scikitlearn import ScikitlearnClassifier, ScikitlearnDecisionTreeClassifier
+from art.estimators.classification.scikitlearn import SklearnClassifier, ScikitlearnDecisionTreeClassifier
 from art.estimators.classification import XGBoostClassifier
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
@@ -185,7 +185,7 @@ def IntraModelTransfer(trainingFeatures,
             model = trainedModelsDict[modelIndex]
 
             if modelType not in ['XGB','DT']:
-                model = ScikitlearnClassifier(model=model)
+                model = SklearnClassifier(model=model)
             
             elif modelType == 'XGB':
                 model = XGBoostClassifier(model=model.best_estimator_, nb_features=X.shape[1], nb_classes=2, clip_values=(0,1))
@@ -245,5 +245,5 @@ if __name__ == '__main__':
     XScaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'LR',5,NNAttackMethod='L1_MAD')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'XGB',5,NNAttackMethod='SAIF')
 
