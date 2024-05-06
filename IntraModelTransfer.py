@@ -73,8 +73,8 @@ def IntraModelTransfer(trainingFeatures,
 
     hyperparameters = {
         'LR' : {
-            'logisticregression__solver' : ['newton-cg', 'lbfgs', 'saga'],
-            'logisticregression__C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+            'solver' : ['newton-cg', 'lbfgs', 'saga'],
+            'C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
         },
         'GNB' : {
             'var_smoothing': np.logspace(0,-9, num=100)
@@ -183,19 +183,18 @@ def IntraModelTransfer(trainingFeatures,
     for modelIndex in trainedModelsDict.keys():
         if modelType != 'NN':
             model = trainedModelsDict[modelIndex]
-            print(type(model))
 
             if modelType not in ['XGB','DT']:
                 model = ScikitlearnClassifier(model=model)
             
             elif modelType == 'XGB':
-                model = XGBoostClassifier(model=model)
+                model = XGBoostClassifier(model=model.best_estimator_, nb_features=X.shape[1], nb_classes=2, clip_values=(0,1))
 
             elif modelType == 'DT':
-                model = ScikitlearnDecisionTreeClassifier(model=model)
+                model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelType != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False)
+                attackMethod = HopSkipJump(classifier=model, targeted=False, max_iter=10, max_eval=5000, verbose=True)
             
             elif modelType == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
@@ -205,7 +204,7 @@ def IntraModelTransfer(trainingFeatures,
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
                 pred = evalModel.predict(advTestFeatures)
-
+                
                 transferPercent = 1 - accuracy_score(testLabels, pred)
 
                 print(f"Percentage of transferability to {testModelIndex} for adversarial inputs created for {modelIndex} is {transferPercent*100:.2f}%")
@@ -233,7 +232,7 @@ def IntraModelTransfer(trainingFeatures,
 
 if __name__ == '__main__':
     import pandas as pd
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
     data = pd.read_csv('Data/diabetes.csv')
@@ -241,10 +240,10 @@ if __name__ == '__main__':
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
 
     XScaled = scaler.fit_transform(X)
     X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'XGB',3,NNAttackMethod='L1_MAD')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'LR',5,NNAttackMethod='L1_MAD')
 

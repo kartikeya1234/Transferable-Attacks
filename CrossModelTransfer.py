@@ -34,7 +34,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN', 'LR', 'GNB', 'XGB','DT','KNN','SVM']
+    modelTypeList = ['NN', 'LR', 'GNB','XGB','DT','KNN','SVM']
     modelDict = {}
 
     hyperparameters = {
@@ -162,15 +162,6 @@ def CrossModelTransfer(trainingFeatures,
             if evalModelName != 'NN':
                 evalModel = modelDict[evalModelName]
 
-                if evalModelName not in ['XGB','DT']:
-                    evalModel = ScikitlearnClassifier(model=evalModel)
-            
-                elif evalModelName == 'XGB':
-                    evalModel = XGBoostClassifier(model=evalModel.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
-
-                elif evalModelName == 'DT':
-                    evalModel = ScikitlearnDecisionTreeClassifier(model=evalModel.best_estimator_)
-
                 if modelName == 'NN': # If previous model is NN, we want numpy arrays
                     pred = evalModel.predict(advTestFeatures.numpy())
                 else:
@@ -186,7 +177,7 @@ def CrossModelTransfer(trainingFeatures,
                 if modelName == 'NN':
                     pred = evalModel(advTestFeatures)
                 else:
-                    pred = evalModelName(torch.tensor(advTestFeatures))
+                    pred = evalModel(torch.tensor(advTestFeatures, dtype=torch.float32))
 
                 numCorrect = (pred.round().squeeze(1) == testLabelsTensor).sum()
                 numSamples = testFeatures.shape[0]
