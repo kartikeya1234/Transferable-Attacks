@@ -11,7 +11,7 @@ from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import make_pipeline
 from scipy.stats import randint
 
 import numpy as np
@@ -27,6 +27,7 @@ warnings.filterwarnings('ignore')
 
 def GetNSplits(features, 
                labels, 
+               scaler,
                nSplits=5, 
                isNN=False) -> dict:
     """GetNSplits
@@ -51,7 +52,7 @@ def GetNSplits(features,
         splitLabels = labels[dataIndices]
 
         if isNN:
-            splitFeatures = torch.tensor(splitFeatures, dtype=torch.float32)
+            splitFeatures = torch.tensor(scaler.transform(splitFeatures), dtype=torch.float32)
             splitLabels = torch.tensor(splitLabels, dtype=torch.float32)
 
         dataSplitsDict[i] = [splitFeatures, splitLabels]
@@ -65,6 +66,7 @@ def IntraModelTransfer(trainingFeatures,
                        testLabels, 
                        modelType,
                        numModelInstances,
+                       scaler,
                        NNAttackMethod='SAIF'):
     
     print("================================================================================================================")
@@ -73,15 +75,15 @@ def IntraModelTransfer(trainingFeatures,
 
     hyperparameters = {
         'LR' : {
-            'solver' : ['newton-cg', 'lbfgs', 'saga'],
-            'C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+            'logisticregression__solver' : ['newton-cg', 'lbfgs', 'saga'],
+            'logisticregression__C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
         },
         'GNB' : {
             'var_smoothing': np.logspace(0,-9, num=100)
         },
         'SVM' : {
-            'C': [0.1, 1, 10, 100, 1000],
-            'gamma': [1, 0.1, 0.01, 0.001, 0.0001]
+            'svc__C': [0.1, 1, 10, 100, 1000],
+            'svc__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
         },
         'XGB' : {
             'n_estimators': [50, 100, 300, 500, 1000],
@@ -93,33 +95,28 @@ def IntraModelTransfer(trainingFeatures,
             "max_features": randint(1, 8),
             "min_samples_leaf": randint(1, 9),
             "criterion": ["gini", "entropy"]
-        },
-        'KNN' : {
-            'n_neighbors': [3, 5, 7, 9, 11],
-            'weights': ['uniform', 'distance'],
-            'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
-            'p': [1, 2]  # For Minkowski distance
         }
     }
 
     pipelines = {
-        'LR' : LogisticRegression(), 
+        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : SVC(kernel='rbf'), 
-        'XGB' : XGBClassifier(n_jobs=4),
+        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
+        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
-        'KNN' : KNeighborsClassifier()
     }
 
     if modelType == 'NN':
         dataSplitsDict = GetNSplits(features=trainingFeatures,
                                     labels=trainingLabels,
                                     nSplits=numModelInstances,
+                                    scaler=scaler,
                                     isNN=True)
     else: 
         dataSplitsDict = GetNSplits(features=trainingFeatures,
                                     labels=trainingLabels,
                                     nSplits=numModelInstances,
+                                    scaler=scaler,
                                     isNN=False)
     
     trainedModelsDict = {}
@@ -155,7 +152,7 @@ def IntraModelTransfer(trainingFeatures,
     # Measuring the accuracies of the models on test set
 
     if modelType == 'NN':
-        testFeatures = torch.tensor(testFeatures, dtype=torch.float32)
+        testFeatures = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32)
         testLabels = torch.tensor(testLabels, dtype=torch.float32)
 
 
@@ -242,8 +239,8 @@ if __name__ == '__main__':
 
     scaler = MinMaxScaler()
 
-    XScaled = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.2, random_state=42)
+    _ = scaler.fit(X)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'XGB',5,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',5,scaler=scaler,NNAttackMethod='SAIF')
 
