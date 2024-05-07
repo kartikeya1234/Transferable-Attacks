@@ -11,6 +11,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import randint
 
 import numpy as np
@@ -27,27 +29,28 @@ warnings.filterwarnings('ignore')
 def CrossModelTransfer(trainingFeatures, 
                        trainingLabels,
                        testFeatures,
-                       testLabels, 
+                       testLabels,
+                       scaler, 
                        NNAttackMethod='SAIF'):
 
     print("================================================================================================================")
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN', 'LR', 'GNB','DT','KNN','SVM','XGB']
+    modelTypeList = ['NN', 'LR', 'GNB','DT','SVM','XGB']
     modelDict = {}
 
     hyperparameters = {
         'LR' : {
-            'solver' : ['newton-cg', 'lbfgs', 'saga'],
-            'C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
+            'logisticregression__solver' : ['newton-cg', 'lbfgs', 'saga'],
+            'logisticregression__C' : [0.001, 0.01, 0.1, 1, 10, 100, 1000]
         },
         'GNB' : {
             'var_smoothing': np.logspace(0,-9, num=100)
         },
         'SVM' : {
-            'C': [0.1, 1, 10, 100, 1000],
-            'gamma': [1, 0.1, 0.01, 0.001, 0.0001]
+            'svc__C': [0.1, 1, 10, 100, 1000],
+            'svc__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
         },
         'XGB' : {
             'n_estimators': [50, 100, 300, 500, 1000],
@@ -59,22 +62,15 @@ def CrossModelTransfer(trainingFeatures,
             "max_features": randint(1, 8),
             "min_samples_leaf": randint(1, 9),
             "criterion": ["gini", "entropy"]
-        },
-        'KNN' : {
-            'n_neighbors': [3, 5, 7, 9, 11],
-            'weights': ['uniform', 'distance'],
-            'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
-            'p': [1, 2]  # For Minkowski distance
         }
     }
 
     pipelines = {
-        'LR' : LogisticRegression(), 
+        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : SVC(kernel='rbf'), 
-        'XGB' : XGBClassifier(n_jobs=4),
+        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
+        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
-        'KNN' : KNeighborsClassifier()
     }
 
     print(f"Training the models now.")
@@ -82,7 +78,8 @@ def CrossModelTransfer(trainingFeatures,
 
     for modelName in modelTypeList:
         if modelName == 'NN':
-            trainingFeaturesTensor = torch.tensor(trainingFeatures, dtype=torch.float32)
+
+            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32)
             trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32)
 
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
@@ -116,7 +113,8 @@ def CrossModelTransfer(trainingFeatures,
             print(f"Accuracy for {modelName} on test set is {accuracy * 100:.2f}%")
 
         else:
-            testFeaturesTensor = torch.tensor(testFeatures, dtype=torch.float32)
+
+            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32)
             testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32)
             
             model.eval()
@@ -165,7 +163,7 @@ def CrossModelTransfer(trainingFeatures,
                 evalModel = modelDict[evalModelName]
 
                 if modelName == 'NN': # If previous model is NN, we want numpy arrays
-                    pred = evalModel.predict(advTestFeatures.numpy())
+                    pred = evalModel.predict(scaler.inverse_transform(advTestFeatures.numpy()))
                 else:
                     pred = evalModel.predict(advTestFeatures)   
                 
@@ -179,7 +177,7 @@ def CrossModelTransfer(trainingFeatures,
                 if modelName == 'NN':
                     pred = evalModel(advTestFeatures)
                 else:
-                    pred = evalModel(torch.tensor(advTestFeatures, dtype=torch.float32))
+                    pred = evalModel(torch.tensor(scaler.transform(advTestFeatures), dtype=torch.float32))
 
                 numCorrect = (pred.round().squeeze(1) != testLabelsTensor).sum()
                 numSamples = testFeatures.shape[0]
@@ -190,7 +188,6 @@ def CrossModelTransfer(trainingFeatures,
 
 if __name__ == '__main__':
     import pandas as pd
-    from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
     data = pd.read_csv('Data/diabetes.csv')
@@ -200,7 +197,7 @@ if __name__ == '__main__':
 
     scaler = MinMaxScaler()
 
-    XScaled = scaler.fit_transform(X)
-    X_train, X_test, y_train, y_test = train_test_split(XScaled, Y, test_size=0.3, random_state=42)
+    _ = scaler.fit(X)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-    CrossModelTransfer(X_train, y_train, X_test, y_test,NNAttackMethod='SAIF')
+    CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='L1_MAD')
