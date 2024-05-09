@@ -5,7 +5,7 @@ from art.attacks.evasion import DecisionTreeAttack
 
 from sklearn.model_selection import KFold
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
@@ -47,7 +47,6 @@ def GetNSplits(features,
     kf = KFold(n_splits=nSplits, shuffle=False)
 
     for i, (_, dataIndices) in enumerate(kf.split(features)):
-        
         splitFeatures = features[dataIndices]
         splitLabels = labels[dataIndices]
 
@@ -99,9 +98,9 @@ def IntraModelTransfer(trainingFeatures,
     }
 
     pipelines = {
-        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
+        'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
+        'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
         'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
     }
@@ -121,21 +120,20 @@ def IntraModelTransfer(trainingFeatures,
     
     trainedModelsDict = {}
     
-    print(f"Training the models now.")
+    print(f"Training the instances now.")
     # Training the models
     for i in range(numModelInstances):
         
-        print(f"Training Model {i+1}")
+        print(f"Training instance {i}")
 
         X = dataSplitsDict[i][0]
         Y = dataSplitsDict[i][1]
 
         if modelType != 'NN':   
-            model = RandomizedSearchCV(pipelines[modelType], 
+            model = GridSearchCV(pipelines[modelType], 
                                            hyperparameters[modelType],
                                            cv=5,
-                                           n_jobs=2,
-                                           random_state=42)
+                                           n_jobs=2)
             model.fit(X, Y)
 
         else:
@@ -143,12 +141,13 @@ def IntraModelTransfer(trainingFeatures,
             trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
             
             model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
-        trainedModelsDict[f'Model_{i}'] = model
+        trainedModelsDict[f'Instance {i}'] = model
 
     print("================================================================================================================")
-    print(f"Testing the models now on the test set.")
+    print(f"Testing the instances now on the test set.")
     # Measuring the accuracies of the models on test set
 
     if modelType == 'NN':
@@ -167,6 +166,7 @@ def IntraModelTransfer(trainingFeatures,
 
         else:
             with torch.no_grad():
+                model.eval()
                 pred = model(testFeatures)
                 
                 numCorrect = (pred.squeeze(1).round() == testLabels).sum()
@@ -175,7 +175,7 @@ def IntraModelTransfer(trainingFeatures,
             print(f"Accuracy for {modelIndex} on test set is {numCorrect/numSamples * 100:.2f}%")
 
     print("================================================================================================================")
-    print('Attacking the models now with each other.')
+    print('Attacking the instances now with each other.')
 
     for modelIndex in trainedModelsDict.keys():
         if modelType != 'NN':
@@ -191,13 +191,13 @@ def IntraModelTransfer(trainingFeatures,
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelType != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False, max_iter=10, max_eval=5000, verbose=True)
+                attackMethod = HopSkipJump(classifier=model, targeted=False)
             
             elif modelType == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
 
             advTestFeatures = attackMethod.generate(x=testFeatures)
-
+            
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
                 pred = evalModel.predict(advTestFeatures)
@@ -242,5 +242,5 @@ if __name__ == '__main__':
     _ = scaler.fit(X)
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',5,scaler=scaler,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'GNB',4,scaler=scaler,NNAttackMethod='L1_MAD')
 

@@ -4,13 +4,12 @@ from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import randint
@@ -59,16 +58,16 @@ def CrossModelTransfer(trainingFeatures,
         },
         'DT' : {
             "max_depth": [3, None],
-            "max_features": randint(1, 8),
-            "min_samples_leaf": randint(1, 9),
+            "max_features": [trainingFeatures.shape[1]],
+            "min_samples_leaf": [8],
             "criterion": ["gini", "entropy"]
         }
     }
 
     pipelines = {
-        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
+        'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
+        'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
         'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
     }
@@ -78,7 +77,6 @@ def CrossModelTransfer(trainingFeatures,
 
     for modelName in modelTypeList:
         if modelName == 'NN':
-
             trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32)
             trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32)
 
@@ -86,14 +84,14 @@ def CrossModelTransfer(trainingFeatures,
             trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
             
             model = DNN(input_shape=trainingFeatures.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
         else:
-            model = RandomizedSearchCV(pipelines[modelName], 
+            model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4,
-                                           random_state=42)
+                                           n_jobs=4)
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
@@ -113,7 +111,6 @@ def CrossModelTransfer(trainingFeatures,
             print(f"Accuracy for {modelName} on test set is {accuracy * 100:.2f}%")
 
         else:
-
             testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32)
             testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32)
             
@@ -144,7 +141,7 @@ def CrossModelTransfer(trainingFeatures,
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelName != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False, max_iter=10, max_eval=5000, verbose=True)
+                attackMethod = HopSkipJump(classifier=model, targeted=False)
             
             elif modelName == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
@@ -200,4 +197,4 @@ if __name__ == '__main__':
     _ = scaler.fit(X)
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 
-    CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='L1_MAD')
+    CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='SAIF')
