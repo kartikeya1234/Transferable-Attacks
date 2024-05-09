@@ -159,9 +159,7 @@ def IntraModelTransfer(trainingFeatures,
         model = trainedModelsDict[modelIndex]
 
         if modelType != 'NN':
-            pred = model.predict(testFeatures)
-            accuracy = accuracy_score(testLabels, pred)
-            
+            accuracy = model.score(testFeatures, testLabels)
             print(f"Accuracy for {modelIndex} on test set is {accuracy * 100:.2f}%")
 
         else:
@@ -200,9 +198,7 @@ def IntraModelTransfer(trainingFeatures,
             
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
-                pred = evalModel.predict(advTestFeatures)
-                
-                transferPercent = 1 - accuracy_score(testLabels, pred)
+                transferPercent = 1 - evalModel.score(advTestFeatures, y_test)
 
                 print(f"Percentage of transferability to {testModelIndex} for adversarial inputs created for {modelIndex} is {transferPercent*100:.2f}%")
         
@@ -229,7 +225,7 @@ def IntraModelTransfer(trainingFeatures,
 
 if __name__ == '__main__':
     import pandas as pd
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
     data = pd.read_csv('Data/diabetes.csv')
@@ -237,10 +233,10 @@ if __name__ == '__main__':
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
 
-    _ = scaler.fit(X)
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+    scaler.fit(X)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'GNB',4,scaler=scaler,NNAttackMethod='L1_MAD')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',4,scaler=scaler,NNAttackMethod='SAIF')
 

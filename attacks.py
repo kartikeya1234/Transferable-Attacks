@@ -164,7 +164,6 @@ class SAIF(Attack):
                         mu = 1. / (2 ** r * math.sqrt(epoch + 1))
                 else:
                     while -self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)) > loss:
-                        print(-self.lossFunction(self.model(entire_X + (s + mu * (z - s)) * (p + mu * (v - p))),y_target.reshape(-1, 1)))
                         r += 1.
                         mu = 1. / (2 ** r * math.sqrt(epoch + 1))
 

@@ -11,7 +11,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import randint
 
 import numpy as np
@@ -127,6 +127,7 @@ def CrossModelTransfer(trainingFeatures,
     print("================================================================================================================")
     print('Attacking the models now with each other.')
 
+    
     for modelName in modelDict.keys():
         if modelName != 'NN':
             model = modelDict[modelName]
@@ -192,9 +193,9 @@ if __name__ == '__main__':
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
 
-    _ = scaler.fit(X)
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+    scaler.fit(X)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
 
     CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='SAIF')

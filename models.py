@@ -39,7 +39,7 @@ class DNN(torch.nn.Module):
     def selfTrain(self, dataloader):
         optim = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3)
         lossFunction = torch.nn.BCELoss()
-        numEpochs = 200
+        numEpochs = 100
 
         self.model.train()
 
