@@ -229,7 +229,7 @@ def IntraModelTransfer(trainingFeatures,
 
 if __name__ == '__main__':
     import pandas as pd
-    from sklearn.preprocessing import MinMaxScaler
+    from sklearn.preprocessing import StandardScaler
     from sklearn.model_selection import train_test_split
 
     data = pd.read_csv('Data/diabetes.csv')
@@ -237,7 +237,7 @@ if __name__ == '__main__':
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
-    scaler = MinMaxScaler()
+    scaler = StandardScaler()
 
     _ = scaler.fit(X)
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
