@@ -90,11 +90,10 @@ def IntraModelTransfer(trainingFeatures,
             'max_depth': [1, 3, 5, 7, 10, 15]
         },
         'DT' : {
-            "max_depth": [3, None],
-            "max_features": randint(1, 8),
-            "min_samples_leaf": randint(1, 9),
-            "criterion": ["gini", "entropy"]
-        }
+            'max_depth': [2, 3, 5, 10, 20],
+            'min_samples_leaf': [5, 10, 20, 50, 100],
+            'criterion': ["gini", "entropy"]
+}
     }
 
     pipelines = {
@@ -138,7 +137,7 @@ def IntraModelTransfer(trainingFeatures,
 
         else:
             data = CustomDataset(X=X, Y=Y)
-            trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=20, shuffle=True)
             
             model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.train()
@@ -159,7 +158,7 @@ def IntraModelTransfer(trainingFeatures,
         model = trainedModelsDict[modelIndex]
 
         if modelType != 'NN':
-            accuracy = model.score(testFeatures, testLabels)
+            accuracy = accuracy_score(y_true=testLabels, y_pred=model.predict(testFeatures))
             print(f"Accuracy for {modelIndex} on test set is {accuracy * 100:.2f}%")
 
         else:
@@ -198,7 +197,13 @@ def IntraModelTransfer(trainingFeatures,
             
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
-                transferPercent = 1 - evalModel.score(advTestFeatures, y_test)
+            
+                corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
+                corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
+                corrTestLabels = testLabels[corrTestSamplesIndices]
+                
+                pred = evalModel.predict(corrLabeledAdvTestFeatures)
+                transferPercent = 1 - accuracy_score(y_pred=pred, y_true=corrTestLabels)
 
                 print(f"Percentage of transferability to {testModelIndex} for adversarial inputs created for {modelIndex} is {transferPercent*100:.2f}%")
         
@@ -211,10 +216,17 @@ def IntraModelTransfer(trainingFeatures,
             
             for testModelIndex in trainedModelsDict.keys():
                 evalModel = trainedModelsDict[testModelIndex]
-                pred = evalModel(advTestFeatures)
+                evalModel.eval()
+
+                with torch.no_grad():
+                    corrTestSamplesIndices = evalModel(testFeatures).round().squeeze(1) == testLabels
+                    corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
+                    corrTestLabels = testLabels[corrTestSamplesIndices]
+
+                pred = evalModel(corrLabeledAdvTestFeatures)
                 
-                numCorrect = (pred.round().squeeze(1) == testLabels).sum()
-                numSamples = testFeatures.shape[0]
+                numCorrect = (pred.round().squeeze(1) == corrTestLabels).sum()
+                numSamples = corrLabeledAdvTestFeatures.shape[0]
 
                 print(f"Percentage of transferability to {testModelIndex} for adversarial inputs created for {modelIndex} is {(1 - numCorrect/numSamples)*100:.2f}%")
         print("================================================================================================================")
@@ -236,7 +248,7 @@ if __name__ == '__main__':
     scaler = MinMaxScaler()
 
     scaler.fit(X)
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=41)
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'NN',4,scaler=scaler,NNAttackMethod='SAIF')
+    IntraModelTransfer(X_train, y_train, X_test, y_test, 'DT',4,scaler=scaler,NNAttackMethod='SAIF')
 
