@@ -14,7 +14,7 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=500, device='cpu') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=470, device='cpu') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
         self.numIters = numIters
@@ -33,7 +33,7 @@ class L1_MAD_attack(Attack):
         y_target = y_target.to(self.device)
         
 
-        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-2)
+        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-3)
         
         for param in self.model.parameters():
             param.requires_grad = False
@@ -45,7 +45,7 @@ class L1_MAD_attack(Attack):
 
             X_pert.requires_grad = True
 
-            adv_logits = self.model(X_pert)
+            adv_logits = self.model(X_pert).squeeze()
             loss = adv_loss(lamb=self.lamb,
                                      adv_logits=adv_logits,
                                      y_target=y_target,
@@ -80,8 +80,8 @@ class SAIF(Attack):
                  Y, 
                  lossFunction, 
                  eps=1.0, 
-                 k=4, 
-                 numIters=500, 
+                 k=1, 
+                 numIters=470, 
                  targeted=False, 
                  device='cpu') -> None:
 
