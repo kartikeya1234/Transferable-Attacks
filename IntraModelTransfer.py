@@ -12,7 +12,6 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.pipeline import make_pipeline
-from scipy.stats import randint
 
 import numpy as np
 import torch
@@ -93,14 +92,14 @@ def IntraModelTransfer(trainingFeatures,
             'max_depth': [2, 3, 5, 10, 20],
             'min_samples_leaf': [5, 10, 20, 50, 100],
             'criterion': ["gini", "entropy"]
-}
+        }
     }
 
     pipelines = {
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
+        'XGB' : XGBClassifier(n_jobs=4,random_state=40),
         'DT' : DecisionTreeClassifier(),
     }
 
@@ -132,7 +131,7 @@ def IntraModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelType], 
                                            hyperparameters[modelType],
                                            cv=5,
-                                           n_jobs=2)
+                                           n_jobs=4)
             model.fit(X, Y)
 
         else:
@@ -201,7 +200,7 @@ def IntraModelTransfer(trainingFeatures,
                 corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                 corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                 corrTestLabels = testLabels[corrTestSamplesIndices]
-                
+
                 pred = evalModel.predict(corrLabeledAdvTestFeatures)
                 transferPercent = 1 - accuracy_score(y_pred=pred, y_true=corrTestLabels)
 
@@ -210,7 +209,7 @@ def IntraModelTransfer(trainingFeatures,
         else:
             model = trainedModelsDict[modelIndex]
             model.eval()
-
+            
             advTestFeatures = model.selfAttack(X=testFeatures,
                                                Y=testLabels)
             
@@ -248,7 +247,15 @@ if __name__ == '__main__':
     scaler = MinMaxScaler()
 
     scaler.fit(X)
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=41)
+    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
+    modelTypeList = ['NN', 'LR', 'GNB','DT','SVM','XGB']
 
-    IntraModelTransfer(X_train, y_train, X_test, y_test, 'DT',4,scaler=scaler,NNAttackMethod='SAIF')
-
+    for modelName in modelTypeList:
+        IntraModelTransfer(trainingFeatures=X_train, 
+                        trainingLabels=y_train, 
+                        testFeatures=X_test, 
+                        testLabels=y_test, 
+                        modelType=modelName,
+                        numModelInstances=4,
+                        scaler=scaler,
+                        NNAttackMethod='SAIF')
