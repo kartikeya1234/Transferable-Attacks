@@ -181,7 +181,7 @@ def IntraModelTransfer(trainingFeatures,
                 model = SklearnClassifier(model=model)
             
             elif modelType == 'XGB':
-                model = XGBoostClassifier(model=model.best_estimator_, nb_features=X.shape[1], nb_classes=2, clip_values=(0,1))
+                model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
 
             elif modelType == 'DT':
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
@@ -248,7 +248,7 @@ if __name__ == '__main__':
 
     scaler.fit(X)
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
-    modelTypeList = ['NN', 'LR', 'GNB','DT','SVM','XGB']
+    modelTypeList = ['SVM']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
