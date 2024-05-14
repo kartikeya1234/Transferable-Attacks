@@ -24,6 +24,7 @@ from CustomDataset import CustomDataset
 import warnings
 warnings.filterwarnings('ignore')
 
+torch.manual_seed(42)
 
 def CrossModelTransfer(trainingFeatures, 
                        trainingLabels,
