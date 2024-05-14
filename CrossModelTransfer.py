@@ -58,10 +58,9 @@ def CrossModelTransfer(trainingFeatures,
             'max_depth': [1, 3, 5, 7, 10, 15]
         },
         'DT' : {
-            "max_depth": [3, None],
-            "max_features": [trainingFeatures.shape[1]],
-            "min_samples_leaf": [8],
-            "criterion": ["gini", "entropy"]
+            'max_depth': [2, 3, 5, 10, 20],
+            'min_samples_leaf': [5, 10, 20, 50, 100],
+            'criterion': ["gini", "entropy"]
         }
     }
 
@@ -69,7 +68,7 @@ def CrossModelTransfer(trainingFeatures,
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
+        'XGB' : XGBClassifier(n_jobs=4,random_state=40),
         'DT' : DecisionTreeClassifier(),
     }
 
@@ -162,11 +161,19 @@ def CrossModelTransfer(trainingFeatures,
                 evalModel = modelDict[evalModelName]
 
                 if modelName == 'NN': # If previous model is NN, we want numpy arrays
-                    pred = evalModel.predict(scaler.inverse_transform(advTestFeatures.numpy()))
+                    corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
+                    corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
+                    corrTestLabels = testLabels[corrTestSamplesIndices]
+
+                    pred = evalModel.predict(scaler.inverse_transform(corrLabeledAdvTestFeatures.numpy()))
                 else:
-                    pred = evalModel.predict(advTestFeatures)   
+                    corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
+                    corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
+                    corrTestLabels = testLabels[corrTestSamplesIndices]
+
+                    pred = evalModel.predict(corrLabeledAdvTestFeatures)   
                 
-                transferPercent = 1 - accuracy_score(testLabels, pred)
+                transferPercent = 1 - accuracy_score(y_true=corrTestLabels, y_pred=pred)
                 print(f"Percentage of transferability to {evalModelName} for adversarial inputs created for {modelName} is {transferPercent*100:.2f}%")
 
             else:
@@ -174,12 +181,21 @@ def CrossModelTransfer(trainingFeatures,
                 evalModel.eval()
 
                 if modelName == 'NN':
-                    pred = evalModel(advTestFeatures)
-                else:
-                    pred = evalModel(torch.tensor(scaler.transform(advTestFeatures), dtype=torch.float32))
+                    corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
+                    corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
+                    corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
 
-                numCorrect = (pred.round().squeeze(1) != testLabelsTensor).sum()
-                numSamples = testFeatures.shape[0]
+                    pred = evalModel(corrLabeledAdvTestFeatures)
+                else:
+                    corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
+                    advTestFeaturesTensor = torch.tensor(advTestFeatures)
+                    corrLabeledAdvTestFeatures = advTestFeaturesTensor[corrTestSamplesIndices]
+                    corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
+
+                    pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures), dtype=torch.float32))
+
+                numCorrect = (pred.round().squeeze(1) != corrTestLabels).sum()
+                numSamples = corrLabeledAdvTestFeatures.shape[0]
 
                 print(f"Percentage of transferability to {evalModelName} for adversarial inputs created for {modelName} is {(numCorrect/numSamples)*100:.2f}%")
         print("================================================================================================================")
