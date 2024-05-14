@@ -5,7 +5,7 @@ from utils import adv_loss
 
 
 class Attack:
-    def __init__(self, model, X, Y, targeted=False, device='cpu') -> None:
+    def __init__(self, model, X, Y, targeted=False, device='cuda:0') -> None:
         self.model = model
         self.X = X
         self.Y = Y
@@ -14,7 +14,7 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=470, device='cpu') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=500, device='cuda:0') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
         self.numIters = numIters
@@ -81,9 +81,9 @@ class SAIF(Attack):
                  lossFunction, 
                  eps=1.0, 
                  k=1, 
-                 numIters=470, 
+                 numIters=500, 
                  targeted=False, 
-                 device='cpu') -> None:
+                 device='cuda:0') -> None:
 
         super().__init__(model, X, Y, targeted, device)
         self.numIters = numIters
@@ -189,6 +189,5 @@ class SAIF(Attack):
         with torch.no_grad():
             X_adv_pred = torch.round(self.model(X_adv))
             print(f"Number of successful counterfactuals : {torch.sum(X_adv_pred.squeeze() != y_target)} / {entire_X.shape[0]}")
-        
         X_adv = X_adv.detach()
         return X_adv 

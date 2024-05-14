@@ -68,7 +68,7 @@ def CrossModelTransfer(trainingFeatures,
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=4,random_state=40),
+        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
     }
 
@@ -77,11 +77,11 @@ def CrossModelTransfer(trainingFeatures,
 
     for modelName in modelTypeList:
         if modelName == 'NN':
-            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32)
-            trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32)
+            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device='cuda:0')
+            trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device='cuda:0')
 
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
-            trainDataLoader = DataLoader(dataset=data, batch_size=10, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=20, shuffle=True)
             
             model = DNN(input_shape=trainingFeatures.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.train()
@@ -106,13 +106,13 @@ def CrossModelTransfer(trainingFeatures,
 
         if modelName != 'NN':
             pred = model.predict(testFeatures)
-            accuracy = accuracy_score(testLabels, pred)
+            accuracy = accuracy_score(y_true=testLabels, y_pred=pred)
             
             print(f"Accuracy for {modelName} on test set is {accuracy * 100:.2f}%")
 
         else:
-            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32)
-            testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32)
+            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32, device='cuda:0')
+            testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32, device='cuda:0')
             
             model.eval()
 
@@ -164,13 +164,11 @@ def CrossModelTransfer(trainingFeatures,
                     corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
-
-                    pred = evalModel.predict(scaler.inverse_transform(corrLabeledAdvTestFeatures.numpy()))
+                    pred = evalModel.predict(scaler.inverse_transform(corrLabeledAdvTestFeatures.cpu().numpy()))
                 else:
                     corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
-
                     pred = evalModel.predict(corrLabeledAdvTestFeatures)   
                 
                 transferPercent = 1 - accuracy_score(y_true=corrTestLabels, y_pred=pred)
@@ -188,11 +186,11 @@ def CrossModelTransfer(trainingFeatures,
                     pred = evalModel(corrLabeledAdvTestFeatures)
                 else:
                     corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
-                    advTestFeaturesTensor = torch.tensor(advTestFeatures)
+                    advTestFeaturesTensor = torch.tensor(advTestFeatures, device='cuda:0')
                     corrLabeledAdvTestFeatures = advTestFeaturesTensor[corrTestSamplesIndices]
                     corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
 
-                    pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures), dtype=torch.float32))
+                    pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures.cpu().numpy()), dtype=torch.float32,device='cuda:0'))
 
                 numCorrect = (pred.round().squeeze(1) != corrTestLabels).sum()
                 numSamples = corrLabeledAdvTestFeatures.shape[0]
@@ -205,14 +203,13 @@ if __name__ == '__main__':
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv('Data/diabetes.csv')
+    data = pd.read_csv('Data/reduced_schufa.csv')
     
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
     scaler = MinMaxScaler()
-
-    scaler.fit(X)
+    
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
-
+    scaler.fit(X_train)
     CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='SAIF')

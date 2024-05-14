@@ -3,12 +3,13 @@ from attacks import SAIF, L1_MAD_attack
 
 class DNN(torch.nn.Module):
 
-    def __init__(self,input_shape,output_shape, attackMethod='SAIF'):
+    def __init__(self,input_shape,output_shape, attackMethod='SAIF', device='cuda:0'):
 
         super().__init__()
         self.inputShape = input_shape
         self.outputShape = output_shape
         self.attackMethod = attackMethod
+        self.device = device
         self.model = torch.nn.Sequential(
 
                               torch.nn.Linear(
@@ -39,14 +40,16 @@ class DNN(torch.nn.Module):
     def selfTrain(self, dataloader):
         optim = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-3)
         lossFunction = torch.nn.BCELoss()
-        numEpochs = 100
+        numEpochs = 300
 
+        self.model = self.model.to(device=self.device)
         self.model.train()
 
         for epoch in  range(numEpochs):
 
             runningLoss =  0
             for _, (x, y) in enumerate(dataloader):
+                
                 pred = self.model(x)
                 loss = lossFunction(pred, y.unsqueeze(1))
                     

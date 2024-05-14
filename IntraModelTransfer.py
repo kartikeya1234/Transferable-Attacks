@@ -51,8 +51,8 @@ def GetNSplits(features,
         splitLabels = labels[dataIndices]
 
         if isNN:
-            splitFeatures = torch.tensor(scaler.transform(splitFeatures), dtype=torch.float32)
-            splitLabels = torch.tensor(splitLabels, dtype=torch.float32)
+            splitFeatures = torch.tensor(scaler.transform(splitFeatures), dtype=torch.float32, device='cuda:0')
+            splitLabels = torch.tensor(splitLabels, dtype=torch.float32, device='cuda:0')
 
         dataSplitsDict[i] = [splitFeatures, splitLabels]
 
@@ -100,7 +100,7 @@ def IntraModelTransfer(trainingFeatures,
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=4,random_state=40),
+        'XGB' : XGBClassifier(n_jobs=6,random_state=42),
         'DT' : DecisionTreeClassifier(),
     }
 
@@ -137,9 +137,9 @@ def IntraModelTransfer(trainingFeatures,
 
         else:
             data = CustomDataset(X=X, Y=Y)
-            trainDataLoader = DataLoader(dataset=data, batch_size=20, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=200, shuffle=True)
             
-            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod, device='cuda:0')
             model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
@@ -150,8 +150,8 @@ def IntraModelTransfer(trainingFeatures,
     # Measuring the accuracies of the models on test set
 
     if modelType == 'NN':
-        testFeatures = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32)
-        testLabels = torch.tensor(testLabels, dtype=torch.float32)
+        testFeatures = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32, device='cuda:0')
+        testLabels = torch.tensor(testLabels, dtype=torch.float32, device='cuda:0')
 
 
     for modelIndex in trainedModelsDict.keys():
@@ -179,7 +179,7 @@ def IntraModelTransfer(trainingFeatures,
             model = trainedModelsDict[modelIndex]
 
             if modelType not in ['XGB','DT']:
-                model = SklearnClassifier(model=model)
+                model = SklearnClassifier(model=model.best_estimator_)
             
             elif modelType == 'XGB':
                 model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
@@ -240,16 +240,17 @@ if __name__ == '__main__':
     from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv('Data/diabetes.csv')
+    data = pd.read_csv('Data/reduced_schufa.csv')
     
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
     scaler = MinMaxScaler()
 
-    scaler.fit(X)
+    
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
-    modelTypeList = ['SVM']
+    scaler.fit(X_train)
+    modelTypeList = ['NN']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
