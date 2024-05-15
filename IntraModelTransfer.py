@@ -144,9 +144,9 @@ def IntraModelTransfer(trainingFeatures,
 
         if modelType != 'NN':  
             model = GridSearchCV(pipelines[modelType], 
-                                           hyperparameters[modelType],
-                                           cv=5,
-                                           n_jobs=4)
+                                 hyperparameters[modelType],
+                                 cv=5,
+                                 n_jobs=4)
             model.fit(X, Y)
 
         else:
@@ -212,7 +212,7 @@ def IntraModelTransfer(trainingFeatures,
                 corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                 corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                 corrTestLabels = testLabels[corrTestSamplesIndices]
-
+                
                 pred = evalModel.predict(corrLabeledAdvTestFeatures)
                 transferPercent = 1 - accuracy_score(y_pred=pred, y_true=corrTestLabels)
 
@@ -233,7 +233,7 @@ def IntraModelTransfer(trainingFeatures,
                     corrTestSamplesIndices = evalModel(testFeatures).round().squeeze(1) == testLabels
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
-
+                
                 pred = evalModel(corrLabeledAdvTestFeatures)
                 
                 numCorrect = (pred.round().squeeze(1) == corrTestLabels).sum()

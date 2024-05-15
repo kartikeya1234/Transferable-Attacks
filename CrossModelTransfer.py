@@ -93,8 +93,7 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4,
-                                           verbose=3) 
+                                           n_jobs=4) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
