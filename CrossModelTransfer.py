@@ -6,7 +6,7 @@ from art.attacks.evasion import DecisionTreeAttack
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
-from xgboost import XGBClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
@@ -37,7 +37,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN', 'LR', 'GNB','DT','SVM','XGB']
+    modelTypeList = ['NN', 'DT','LR', 'GNB','SVM','KNN']
     modelDict = {}
 
     hyperparameters = {
@@ -52,15 +52,17 @@ def CrossModelTransfer(trainingFeatures,
             'svc__C': [0.1, 1, 10, 100, 1000],
             'svc__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
         },
-        'XGB' : {
-            'n_estimators': [50, 100, 300, 500, 1000],
-            'learning_rate' : [0.001, 0.01, 0.1, 0.2, 0.3],
-            'max_depth': [1, 3, 5, 7, 10, 15]
-        },
         'DT' : {
             'max_depth': [2, 3, 5, 10, 20],
             'min_samples_leaf': [5, 10, 20, 50, 100],
             'criterion': ["gini", "entropy"]
+        },
+        'KNN' : {
+            'kneighborsclassifier__n_neighbors': (1,10, 1),
+            'kneighborsclassifier__leaf_size': (20,40,1),
+            'kneighborsclassifier__p': (1,2),
+            'kneighborsclassifier__weights': ('uniform', 'distance'),
+            'kneighborsclassifier__metric': ('minkowski', 'chebyshev')
         }
     }
 
@@ -68,8 +70,8 @@ def CrossModelTransfer(trainingFeatures,
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=4,random_state=42),
         'DT' : DecisionTreeClassifier(),
+        'KNN' : make_pipeline(scaler, KNeighborsClassifier())
     }
 
     print(f"Training the models now.")
@@ -81,7 +83,7 @@ def CrossModelTransfer(trainingFeatures,
             trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device='cuda:0')
 
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
-            trainDataLoader = DataLoader(dataset=data, batch_size=20, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=128, shuffle=True)
             
             model = DNN(input_shape=trainingFeatures.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.train()
@@ -91,7 +93,7 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4)
+                                           n_jobs=4) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
@@ -139,7 +141,7 @@ def CrossModelTransfer(trainingFeatures,
                 model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
 
             elif modelName == 'DT':
-                model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
+                model = ScikitlearnDecisionTreeClassifier(model=model)
 
             if modelName != 'DT':
                 attackMethod = HopSkipJump(classifier=model, targeted=False)
@@ -203,7 +205,7 @@ if __name__ == '__main__':
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv('Data/reduced_schufa.csv')
+    data = pd.read_csv('Data/mushroom_cleaned.csv')
     
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values

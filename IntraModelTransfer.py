@@ -1,5 +1,4 @@
 from art.estimators.classification.scikitlearn import SklearnClassifier, ScikitlearnDecisionTreeClassifier
-from art.estimators.classification import XGBoostClassifier
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
@@ -7,10 +6,10 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
-from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 
 import numpy as np
@@ -24,6 +23,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 torch.manual_seed(42)
+
 
 def GetNSplits(features, 
                labels, 
@@ -67,7 +67,19 @@ def IntraModelTransfer(trainingFeatures,
                        numModelInstances,
                        scaler,
                        NNAttackMethod='SAIF'):
-    
+    """_summary_
+
+    Args:
+        trainingFeatures (_type_): _description_
+        trainingLabels (_type_): _description_
+        testFeatures (_type_): _description_
+        testLabels (_type_): _description_
+        modelType (_type_): _description_
+        numModelInstances (_type_): _description_
+        scaler (_type_): _description_
+        NNAttackMethod (str, optional): _description_. Defaults to 'SAIF'.
+    """
+
     print("================================================================================================================")
     print(f"Conducting Intra Model Transferability for model {modelType} with {numModelInstances} instances.")
     print("================================================================================================================")
@@ -84,15 +96,17 @@ def IntraModelTransfer(trainingFeatures,
             'svc__C': [0.1, 1, 10, 100, 1000],
             'svc__gamma': [1, 0.1, 0.01, 0.001, 0.0001]
         },
-        'XGB' : {
-            'n_estimators': [50, 100, 300, 500, 1000],
-            'learning_rate' : [0.001, 0.01, 0.1, 0.2, 0.3],
-            'max_depth': [1, 3, 5, 7, 10, 15]
-        },
         'DT' : {
             'max_depth': [2, 3, 5, 10, 20],
             'min_samples_leaf': [5, 10, 20, 50, 100],
             'criterion': ["gini", "entropy"]
+        },
+        'KNN' : {
+            'kneighborsclassifier__n_neighbors': (1,10, 1),
+            'kneighborsclassifier__leaf_size': (20,40,1),
+            'kneighborsclassifier__p': (1,2),
+            'kneighborsclassifier__weights': ('uniform', 'distance'),
+            'kneighborsclassifier__metric': ('minkowski', 'chebyshev')
         }
     }
 
@@ -100,8 +114,8 @@ def IntraModelTransfer(trainingFeatures,
         'LR' : make_pipeline(scaler, LogisticRegression()), 
         'GNB' : GaussianNB(),
         'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
-        'XGB' : XGBClassifier(n_jobs=6,random_state=42),
         'DT' : DecisionTreeClassifier(),
+        'KNN' : make_pipeline(scaler, KNeighborsClassifier())
     }
 
     if modelType == 'NN':
@@ -128,7 +142,7 @@ def IntraModelTransfer(trainingFeatures,
         X = dataSplitsDict[i][0]
         Y = dataSplitsDict[i][1]
 
-        if modelType != 'NN':   
+        if modelType != 'NN':  
             model = GridSearchCV(pipelines[modelType], 
                                            hyperparameters[modelType],
                                            cv=5,
@@ -137,7 +151,7 @@ def IntraModelTransfer(trainingFeatures,
 
         else:
             data = CustomDataset(X=X, Y=Y)
-            trainDataLoader = DataLoader(dataset=data, batch_size=200, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=128, shuffle=True)
             
             model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod, device='cuda:0')
             model.train()
@@ -178,17 +192,14 @@ def IntraModelTransfer(trainingFeatures,
         if modelType != 'NN':
             model = trainedModelsDict[modelIndex]
 
-            if modelType not in ['XGB','DT']:
-                model = SklearnClassifier(model=model.best_estimator_)
+            if modelType not in ['DT']:
+                model = SklearnClassifier(model=model)
             
-            elif modelType == 'XGB':
-                model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
-
             elif modelType == 'DT':
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelType != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False)
+                attackMethod = HopSkipJump(classifier=model, targeted=False, batch_size=400)
             
             elif modelType == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
@@ -240,7 +251,7 @@ if __name__ == '__main__':
     from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv('Data/reduced_schufa.csv')
+    data = pd.read_csv('Data/mushroom_cleaned.csv')
     
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
@@ -250,7 +261,7 @@ if __name__ == '__main__':
     
     X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['NN']
+    modelTypeList = ['GNB']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
