@@ -259,9 +259,14 @@ if __name__ == '__main__':
     scaler = MinMaxScaler()
 
     
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, 
+                                                        Y, 
+                                                        test_size=0.2, 
+                                                        shuffle=True, 
+                                                        stratify=Y,
+                                                        random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['GNB']
+    modelTypeList = ['NN']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 

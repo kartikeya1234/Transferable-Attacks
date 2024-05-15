@@ -134,12 +134,9 @@ def CrossModelTransfer(trainingFeatures,
         if modelName != 'NN':
             model = modelDict[modelName]
 
-            if modelName not in ['XGB','DT']:
+            if modelName not in ['DT']:
                 model = SklearnClassifier(model=model)
             
-            elif modelName == 'XGB':
-                model = XGBoostClassifier(model=model.best_estimator_, nb_features=testFeatures.shape[1], nb_classes=2, clip_values=(0,1))
-
             elif modelName == 'DT':
                 model = ScikitlearnDecisionTreeClassifier(model=model)
 
@@ -212,6 +209,16 @@ if __name__ == '__main__':
 
     scaler = MinMaxScaler()
     
-    X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, shuffle=True, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, 
+                                                        Y, 
+                                                        test_size=0.2, 
+                                                        shuffle=True,
+                                                        stratify=Y, 
+                                                        random_state=42)
     scaler.fit(X_train)
-    CrossModelTransfer(X_train, y_train, X_test, y_test, scaler,NNAttackMethod='SAIF')
+    CrossModelTransfer(trainingFeatures=X_train, 
+                       trainingLabels=y_train, 
+                       testFeatures=X_test, 
+                       testLabels=y_test, 
+                       scaler=scaler, 
+                       NNAttackMethod='SAIF')
