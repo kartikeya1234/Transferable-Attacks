@@ -37,7 +37,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN', 'DT','LR', 'GNB','SVM','KNN']
+    modelTypeList = ['NN','DT','LR','GNB','KNN','SVM']
     modelDict = {}
 
     hyperparameters = {
@@ -93,7 +93,8 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4) 
+                                           n_jobs=4,
+                                           verbose=3) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
@@ -138,7 +139,7 @@ def CrossModelTransfer(trainingFeatures,
                 model = SklearnClassifier(model=model)
             
             elif modelName == 'DT':
-                model = ScikitlearnDecisionTreeClassifier(model=model)
+                model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelName != 'DT':
                 attackMethod = HopSkipJump(classifier=model, targeted=False)

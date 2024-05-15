@@ -257,7 +257,6 @@ if __name__ == '__main__':
     Y = data.iloc[:,-1].values
 
     scaler = MinMaxScaler()
-
     
     X_train, X_test, y_train, y_test = train_test_split(X, 
                                                         Y, 
@@ -276,4 +275,4 @@ if __name__ == '__main__':
                         modelType=modelName,
                         numModelInstances=4,
                         scaler=scaler,
-                        NNAttackMethod='SAIF')
+                        NNAttackMethod='L1_MAD')
