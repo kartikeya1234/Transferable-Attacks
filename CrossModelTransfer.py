@@ -1,5 +1,4 @@
 from art.estimators.classification.scikitlearn import SklearnClassifier, ScikitlearnDecisionTreeClassifier
-from art.estimators.classification import XGBoostClassifier
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
@@ -12,7 +11,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
-from scipy.stats import randint
 
 import numpy as np
 import torch
@@ -25,6 +23,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 torch.manual_seed(42)
+
 
 def CrossModelTransfer(trainingFeatures, 
                        trainingLabels,
@@ -85,7 +84,7 @@ def CrossModelTransfer(trainingFeatures,
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
             trainDataLoader = DataLoader(dataset=data, batch_size=128, shuffle=True)
             
-            model = DNN(input_shape=trainingFeatures.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            model = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
@@ -93,7 +92,8 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4) 
+                                           n_jobs=4,
+                                           verbose=3) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model

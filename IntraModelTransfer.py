@@ -265,7 +265,7 @@ if __name__ == '__main__':
                                                         stratify=Y,
                                                         random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['NN']
+    modelTypeList = ['DT','GNB','NN','LR','KNN']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
