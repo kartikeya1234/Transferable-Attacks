@@ -2,7 +2,7 @@ from art.estimators.classification.scikitlearn import SklearnClassifier, Scikitl
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
@@ -44,12 +44,12 @@ def GetNSplits(features,
     """
 
     dataSplitsDict = {}
-    kf = KFold(n_splits=nSplits, shuffle=False)
+    kf = StratifiedKFold(n_splits=nSplits)
 
-    for i, (_, dataIndices) in enumerate(kf.split(features)):
+    for i, (_, dataIndices) in enumerate(kf.split(features, labels)):
         splitFeatures = features[dataIndices]
         splitLabels = labels[dataIndices]
-
+        
         if isNN:
             splitFeatures = torch.tensor(scaler.transform(splitFeatures), dtype=torch.float32, device='cuda:0')
             splitLabels = torch.tensor(splitLabels, dtype=torch.float32, device='cuda:0')
@@ -265,7 +265,7 @@ if __name__ == '__main__':
                                                         stratify=Y,
                                                         random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['DT','GNB','NN','LR','KNN']
+    modelTypeList = ['DT']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
