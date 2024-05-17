@@ -36,7 +36,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN','DT','LR','GNB','KNN','SVM']
+    modelTypeList = ['NN','SVM']
     modelDict = {}
 
     hyperparameters = {
@@ -221,4 +221,4 @@ if __name__ == '__main__':
                        testFeatures=X_test, 
                        testLabels=y_test, 
                        scaler=scaler, 
-                       NNAttackMethod='SAIF')
+                       NNAttackMethod='L1_MAD')

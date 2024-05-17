@@ -44,9 +44,9 @@ def GetNSplits(features,
     """
 
     dataSplitsDict = {}
-    kf = StratifiedKFold(n_splits=nSplits)
+    skf = StratifiedKFold(n_splits=nSplits)
 
-    for i, (_, dataIndices) in enumerate(kf.split(features, labels)):
+    for i, (_, dataIndices) in enumerate(skf.split(features, labels)):
         splitFeatures = features[dataIndices]
         splitLabels = labels[dataIndices]
         
@@ -265,7 +265,7 @@ if __name__ == '__main__':
                                                         stratify=Y,
                                                         random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['DT']
+    modelTypeList = ['LR']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
