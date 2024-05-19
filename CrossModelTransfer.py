@@ -36,7 +36,7 @@ def CrossModelTransfer(trainingFeatures,
     print(f"Conducting Cross Model Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN','SVM']
+    modelTypeList = ['NN','KNN','SVM','LR','DT','GNB']
     modelDict = {}
 
     hyperparameters = {
@@ -66,11 +66,11 @@ def CrossModelTransfer(trainingFeatures,
     }
 
     pipelines = {
-        'LR' : make_pipeline(scaler, LogisticRegression()), 
+        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
+        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
         'DT' : DecisionTreeClassifier(),
-        'KNN' : make_pipeline(scaler, KNeighborsClassifier())
+        'KNN' : make_pipeline(MinMaxScaler(), KNeighborsClassifier())
     }
 
     print(f"Training the models now.")
@@ -82,7 +82,7 @@ def CrossModelTransfer(trainingFeatures,
             trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device='cuda:0')
 
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
-            trainDataLoader = DataLoader(dataset=data, batch_size=128, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
             
             model = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
             model.train()
@@ -92,8 +92,7 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4,
-                                           verbose=3) 
+                                           n_jobs=4) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
@@ -141,7 +140,11 @@ def CrossModelTransfer(trainingFeatures,
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelName != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False)
+                attackMethod = HopSkipJump(classifier=model, 
+                                           targeted=False,
+                                           max_iter=10, 
+                                           max_eval=5000, 
+                                           verbose=True)
             
             elif modelName == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
@@ -159,12 +162,16 @@ def CrossModelTransfer(trainingFeatures,
             if evalModelName != 'NN':
                 evalModel = modelDict[evalModelName]
 
-                if modelName == 'NN': # If previous model is NN, we want numpy arrays
+                if modelName == 'NN': # If previous model is NN, we want inverse transformed adversarial samples
+                    
+                    # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model
                     corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
                     pred = evalModel.predict(scaler.inverse_transform(corrLabeledAdvTestFeatures.cpu().numpy()))
-                else:
+                else: # Else
+
+                    # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model  
                     corrTestSamplesIndices = evalModel.predict(testFeatures) == testLabels
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
@@ -178,17 +185,19 @@ def CrossModelTransfer(trainingFeatures,
                 evalModel.eval()
 
                 if modelName == 'NN':
+
+                    # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model
                     corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
-
                     pred = evalModel(corrLabeledAdvTestFeatures)
                 else:
+
+                    # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model
                     corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
                     advTestFeaturesTensor = torch.tensor(advTestFeatures, device='cuda:0')
                     corrLabeledAdvTestFeatures = advTestFeaturesTensor[corrTestSamplesIndices]
                     corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
-
                     pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures.cpu().numpy()), dtype=torch.float32,device='cuda:0'))
 
                 numCorrect = (pred.round().squeeze(1) != corrTestLabels).sum()

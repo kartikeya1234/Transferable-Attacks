@@ -14,7 +14,7 @@ class Attack:
 
 
 class L1_MAD_attack(Attack):
-    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=470, device='cuda:0') -> None:
+    def __init__(self, model, X, Y, Lambda, targeted=False, numIters=500, device='cuda:0') -> None:
         super().__init__(model, X, Y, targeted, device)
         self.lamb = Lambda
         self.numIters = numIters
@@ -81,7 +81,7 @@ class SAIF(Attack):
                  lossFunction, 
                  eps=1.0, 
                  k=1, 
-                 numIters=470, 
+                 numIters=500, 
                  targeted=False, 
                  device='cuda:0') -> None:
 

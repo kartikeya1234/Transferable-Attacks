@@ -2,7 +2,7 @@ from art.estimators.classification.scikitlearn import SklearnClassifier, Scikitl
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
@@ -11,6 +11,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import MinMaxScaler
+from sklearn import datasets
 
 import numpy as np
 import torch
@@ -111,11 +113,11 @@ def IntraModelTransfer(trainingFeatures,
     }
 
     pipelines = {
-        'LR' : make_pipeline(scaler, LogisticRegression()), 
+        'LR' : make_pipeline(MinMaxScaler(), LogisticRegression()), 
         'GNB' : GaussianNB(),
-        'SVM' : make_pipeline(scaler, SVC(kernel='rbf')), 
+        'SVM' : make_pipeline(MinMaxScaler(), SVC(kernel='rbf')), 
         'DT' : DecisionTreeClassifier(),
-        'KNN' : make_pipeline(scaler, KNeighborsClassifier())
+        'KNN' : make_pipeline(MinMaxScaler(), KNeighborsClassifier())
     }
 
     if modelType == 'NN':
@@ -146,14 +148,17 @@ def IntraModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelType], 
                                  hyperparameters[modelType],
                                  cv=5,
-                                 n_jobs=4)
+                                 n_jobs=-1)
             model.fit(X, Y)
 
         else:
             data = CustomDataset(X=X, Y=Y)
-            trainDataLoader = DataLoader(dataset=data, batch_size=128, shuffle=True)
+            trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
             
-            model = DNN(input_shape=X.shape[1], output_shape=1, attackMethod=NNAttackMethod, device='cuda:0')
+            model = DNN(input_shape=X.shape[1],
+                        output_shape=1,
+                        attackMethod=NNAttackMethod, 
+                        device='cuda:0')
             model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
@@ -182,7 +187,7 @@ def IntraModelTransfer(trainingFeatures,
                 
                 numCorrect = (pred.squeeze(1).round() == testLabels).sum()
                 numSamples = testFeatures.shape[0]
-
+            
             print(f"Accuracy for {modelIndex} on test set is {numCorrect/numSamples * 100:.2f}%")
 
     print("================================================================================================================")
@@ -199,7 +204,11 @@ def IntraModelTransfer(trainingFeatures,
                 model = ScikitlearnDecisionTreeClassifier(model=model.best_estimator_)
 
             if modelType != 'DT':
-                attackMethod = HopSkipJump(classifier=model, targeted=False, batch_size=400)
+                attackMethod = HopSkipJump(classifier=model, 
+                                           targeted=False,
+                                           max_iter=10, 
+                                           max_eval=5000, 
+                                           verbose=True)
             
             elif modelType == 'DT':
                 attackMethod = DecisionTreeAttack(classifier=model)
@@ -248,11 +257,10 @@ def IntraModelTransfer(trainingFeatures,
 
 if __name__ == '__main__':
     import pandas as pd
-    from sklearn.preprocessing import MinMaxScaler
     from sklearn.model_selection import train_test_split
 
     data = pd.read_csv('Data/mushroom_cleaned.csv')
-    
+
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
 
@@ -265,7 +273,8 @@ if __name__ == '__main__':
                                                         stratify=Y,
                                                         random_state=42)
     scaler.fit(X_train)
-    modelTypeList = ['LR']
+    
+    modelTypeList = ['KNN','SVM','LR','DT','GNB']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
@@ -275,4 +284,4 @@ if __name__ == '__main__':
                         modelType=modelName,
                         numModelInstances=4,
                         scaler=scaler,
-                        NNAttackMethod='L1_MAD')
+                        NNAttackMethod='SAIF')
