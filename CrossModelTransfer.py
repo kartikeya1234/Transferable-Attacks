@@ -57,8 +57,8 @@ def CrossModelTransfer(trainingFeatures,
             'criterion': ["gini", "entropy"]
         },
         'KNN' : {
-            'kneighborsclassifier__n_neighbors': (1,10, 1),
-            'kneighborsclassifier__leaf_size': (20,40,1),
+            'kneighborsclassifier__n_neighbors': np.arange(1,11, 1),
+            'kneighborsclassifier__leaf_size': np.arange(20,41,1),
             'kneighborsclassifier__p': (1,2),
             'kneighborsclassifier__weights': ('uniform', 'distance'),
             'kneighborsclassifier__metric': ('minkowski', 'chebyshev')
@@ -92,7 +92,7 @@ def CrossModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelName], 
                                            hyperparameters[modelName],
                                            cv=5,
-                                           n_jobs=4) 
+                                           n_jobs=-1) 
             model.fit(trainingFeatures, trainingLabels)
 
         modelDict[modelName] = model
@@ -147,7 +147,8 @@ def CrossModelTransfer(trainingFeatures,
                                            verbose=True)
             
             elif modelName == 'DT':
-                attackMethod = DecisionTreeAttack(classifier=model)
+                attackMethod = DecisionTreeAttack(classifier=model, 
+                                                  offset=1)
 
             advTestFeatures = attackMethod.generate(x=testFeatures)
         
@@ -169,6 +170,7 @@ def CrossModelTransfer(trainingFeatures,
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabels[corrTestSamplesIndices]
                     pred = evalModel.predict(scaler.inverse_transform(corrLabeledAdvTestFeatures.cpu().numpy()))
+
                 else: # Else
 
                     # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model  
@@ -191,6 +193,7 @@ def CrossModelTransfer(trainingFeatures,
                     corrLabeledAdvTestFeatures = advTestFeatures[corrTestSamplesIndices]
                     corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
                     pred = evalModel(corrLabeledAdvTestFeatures)
+
                 else:
 
                     # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model
@@ -230,4 +233,4 @@ if __name__ == '__main__':
                        testFeatures=X_test, 
                        testLabels=y_test, 
                        scaler=scaler, 
-                       NNAttackMethod='L1_MAD')
+                       NNAttackMethod='SAIF')

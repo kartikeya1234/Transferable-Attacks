@@ -12,7 +12,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
-from sklearn import datasets
 
 import numpy as np
 import torch
@@ -104,8 +103,8 @@ def IntraModelTransfer(trainingFeatures,
             'criterion': ["gini", "entropy"]
         },
         'KNN' : {
-            'kneighborsclassifier__n_neighbors': (1,10, 1),
-            'kneighborsclassifier__leaf_size': (20,40,1),
+            'kneighborsclassifier__n_neighbors': np.arange(1,11, 1),
+            'kneighborsclassifier__leaf_size': np.arange(20,41,1),
             'kneighborsclassifier__p': (1,2),
             'kneighborsclassifier__weights': ('uniform', 'distance'),
             'kneighborsclassifier__metric': ('minkowski', 'chebyshev')
@@ -148,9 +147,10 @@ def IntraModelTransfer(trainingFeatures,
             model = GridSearchCV(pipelines[modelType], 
                                  hyperparameters[modelType],
                                  cv=5,
-                                 n_jobs=-1)
+                                 n_jobs=-1,
+                                 verbose=3)
             model.fit(X, Y)
-
+        
         else:
             data = CustomDataset(X=X, Y=Y)
             trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
@@ -211,7 +211,7 @@ def IntraModelTransfer(trainingFeatures,
                                            verbose=True)
             
             elif modelType == 'DT':
-                attackMethod = DecisionTreeAttack(classifier=model)
+                attackMethod = DecisionTreeAttack(classifier=model, offset=1)
 
             advTestFeatures = attackMethod.generate(x=testFeatures)
             
@@ -272,9 +272,9 @@ if __name__ == '__main__':
                                                         shuffle=True, 
                                                         stratify=Y,
                                                         random_state=42)
+
     scaler.fit(X_train)
-    
-    modelTypeList = ['KNN','SVM','LR','DT','GNB']
+    modelTypeList = ['KNN']
 
     for modelName in modelTypeList:
         IntraModelTransfer(trainingFeatures=X_train, 
@@ -285,3 +285,4 @@ if __name__ == '__main__':
                         numModelInstances=4,
                         scaler=scaler,
                         NNAttackMethod='SAIF')
+
