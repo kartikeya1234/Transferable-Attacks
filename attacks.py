@@ -33,7 +33,7 @@ class L1_MAD_attack(Attack):
         y_target = y_target.to(self.device)
         
 
-        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-3)
+        adv_optimizer = torch.optim.Adam([X_pert],lr = 1e-2)
         
         for param in self.model.parameters():
             param.requires_grad = False
