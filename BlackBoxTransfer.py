@@ -86,41 +86,45 @@ def BlackBoxTransfer(trainingFeatures,
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
             trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
             
-            model = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
-            model.train()
-            model.selfTrain(dataloader=trainDataLoader)
+            targetModel = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            targetModel.train()
+            targetModel.selfTrain(dataloader=trainDataLoader)
 
         else:
-            model = GridSearchCV(pipelines[targetModelName], 
+            targetModel = GridSearchCV(pipelines[targetModelName], 
                                            hyperparameters[targetModelName],
                                            cv=5,
                                            n_jobs=-1) 
-            model.fit(trainingFeatures, trainingLabels)
+            targetModel.fit(trainingFeatures, trainingLabels)
 
-        targetModelDict[targetModelName] = model
-        print(f"{targetModelName} trained")
+        targetModelDict[targetModelName] = targetModel
+        print(f"Target model {targetModelName} trained")
 
     print(f"Testing the models now on the test set.")
     print("================================================================================================================")
     # Measuring the accuracies of the models on test set
 
     for targetModelName in targetModelDict.keys():
-        model = targetModelDict[targetModelName]
+        targetModel = targetModelDict[targetModelName]
 
         if targetModelName != 'NN':
-            pred = model.predict(testFeatures)
+            pred = targetModel.predict(testFeatures)
             accuracy = accuracy_score(y_true=testLabels, y_pred=pred)
             
             print(f"Accuracy for target model {targetModelName} on test set is {accuracy * 100:.2f}%")
 
         else:
-            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32, device=model.device)
-            testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32, device=model.device)
+            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures),
+                                              dtype=torch.float32,
+                                              device=targetModel.device)
+            testLabelsTensor = torch.tensor(testLabels, 
+                                            dtype=torch.float32,
+                                            device=targetModel.device)
             
-            model.eval()
+            targetModel.eval()
 
             with torch.no_grad():
-                pred = model(testFeaturesTensor)
+                pred = targetModel(testFeaturesTensor)
                 
                 numCorrect = (pred.squeeze(1).round() == testLabelsTensor).sum()
                 numSamples = testFeaturesTensor.shape[0]
@@ -131,19 +135,20 @@ def BlackBoxTransfer(trainingFeatures,
 
     # Selecting target models one by one
     for targetModelName in targetModelDict.keys():
+        print("================================================================================================================")
         print(f"Target Model: {targetModelName}")
         print(f"Training local models with the labels provided by target model {targetModelName}")
 
         localModelDict = {}
-
         targetModel = targetModelDict[targetModelName]
         
+        # Extracting labels for the training set from the target models
         if targetModelName == 'NN':
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
             newTrainingLabels = targetModel.predict(trainingFeatures)
 
-        # Training local models with labels provided by targetModel
+        # Training local models with labels provided by the target model
         for localModelName in modelTypeList:
             if localModelName == 'NN':
                 
@@ -157,7 +162,8 @@ def BlackBoxTransfer(trainingFeatures,
                     newTrainingLabelsTensor = torch.tensor(newTrainingLabels, 
                                                            dtype=torch.float32,
                                                            device=localModel.device)
-                    data = CustomDataset(X=trainingFeaturesTensor, Y=newTrainingLabelsTensor)
+                    data = CustomDataset(X=trainingFeaturesTensor, 
+                                         Y=newTrainingLabelsTensor)
 
                 trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
                 localModel.train()
@@ -225,23 +231,25 @@ def BlackBoxTransfer(trainingFeatures,
                 elif localModelName == 'DT':
                     attackMethod = DecisionTreeAttack(classifier=model, 
                                                     offset=1)
-
+                
+                # advAccuracy denotes the accuracy of a model on the adversarial samples
                 advTestFeatures = attackMethod.generate(x=testFeatures)
                 advAccuracy = accuracy_score(y_true=testLabels, y_pred=localModel.predict(advTestFeatures))
                 advTestFeaturesIndices = localModel.predict(advTestFeatures) != testLabels
 
             else:
                 localModel.eval()
-
                 advTestFeatures = localModel.selfAttack(X=testFeaturesTensor,
-                                                Y=testLabelsTensor)
+                                                        Y=testLabelsTensor)
                 
+                # advAccuracy denotes the accuracy of a model on the adversarial samples
                 advAccuracy = (localModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
-                advAccuracy /= testLabelsTensor.shape[0]
+                advAccuracy = advAccuracy / testLabelsTensor.shape[0]
                 advTestFeaturesIndices = localModel(advTestFeatures).round().squeeze(1) != testLabelsTensor
 
-            print(f"Accuracy of {localModelName} on adversarial test set is {advAccuracy * 100:.2f}%")
+            print(f"Accuracy of local model {localModelName} on adversarial test set is {advAccuracy * 100:.2f}%")
 
+            # How many attacks are being transferred to the target model 
             if targetModelName == 'NN':
                 if localModelName == 'NN':
                     advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
@@ -252,35 +260,43 @@ def BlackBoxTransfer(trainingFeatures,
                     advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum()
                     advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
 
+                # Selecting adversarial samples that fooled the local model to see if it fools the target model.
+                # Looking at how many and what percentage of those samples also fooled the target model
                 advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices]
                 advSuccTestFeaturesCorrectLabels = testLabelsTensor[advTestFeaturesIndices]
-                numAttacksTransferred = (targetModel(advSuccTestFeatures).round().squeeze(1) != advSuccTestFeaturesCorrectLabels).sum()
+                numAttacksTransferred = (targetModel(advSuccTestFeatures).round().squeeze(1) != advSuccTestFeaturesCorrectLabels).sum().item()
 
+                print(f"Accuracy of target model {targetModelName} on adversarial test set is {advTargetModelAccuracy * 100:.2f}%")
                 print(f"Number of attacks transferred from local model {localModelName} to target model {targetModelName} is {numAttacksTransferred}")
                 print(f"Percentage of attacks transferred from local model {localModelName} to target model {targetModelName} is {numAttacksTransferred / advSuccTestFeatures.shape[0] * 100:.2f}%")
+                print("----------------------------------------------------------------------------------------------------------------")
 
             else:
                 if localModelName == 'NN':
-                    pred = targetModel.predict(scaler.inverse_transform(advTestFeatures.cpu().numpy()))
+                    advTestFeatures = scaler.inverse_transform(advTestFeatures.cpu().numpy())
+                    pred = targetModel.predict(advTestFeatures)
                     advTargetModelAccuracy = accuracy_score(y_true=testLabels, y_pred=pred)  
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices.cpu().numpy()]
-                    advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices].cpu().numpy()
+                    advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices.cpu().numpy()]
                 else:
                     advTargetModelAccuracy = accuracy_score(y_true=testLabels, y_pred=targetModel.predict(advTestFeatures))
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices]
                 
+                # Selecting adversarial samples that fooled the local model to see if it fools the target model.
+                # Looking at how many and what percentage of those samples also fooled the target model
                 numAttacksTransferred = (targetModel.predict(advSuccTestFeatures) != advSuccTestFeaturesCorrectLabels).sum()
 
+                print(f"Accuracy of target model {targetModelName} on adversarial test set is {advTargetModelAccuracy * 100:.2f}%")
                 print(f"Number of attacks transferred from local model {localModelName} to target model {targetModelName} is {numAttacksTransferred}")
                 print(f"Percentage of attacks transferred from local model {localModelName} to target model {targetModelName} is {numAttacksTransferred / advSuccTestFeatures.shape[0] * 100:.2f}%")
-
+                print("----------------------------------------------------------------------------------------------------------------")
 
 if __name__ == '__main__':
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
-    data = pd.read_csv('Data/diabetes.csv')
+    data = pd.read_csv('Data/mushroom_cleaned.csv')
     
     X = data.iloc[:,:-1].values
     Y = data.iloc[:,-1].values
