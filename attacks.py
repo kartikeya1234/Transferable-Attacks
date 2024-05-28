@@ -21,7 +21,6 @@ class L1_MAD_attack(Attack):
 
     
     def attack(self):
-        print('======================================================================')
         print('L1 weighted by MAD attack on NN')
 
         entire_X = self.X
@@ -93,7 +92,6 @@ class SAIF(Attack):
 
 
     def attack(self):
-        print('======================================================================')
         print('SAIF method on NN')
 
         entire_X = self.X

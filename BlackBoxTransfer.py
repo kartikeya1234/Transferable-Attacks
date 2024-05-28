@@ -39,6 +39,7 @@ def BlackBoxTransfer(trainingFeatures,
     print("================================================================================================================")    
 
     modelTypeList = ['NN','KNN','SVM','LR','DT','GNB']
+    targetModelList = ['KNN','SVM','LR','DT','GNB']
     targetModelDict = {}
 
     hyperparameters = {
@@ -75,27 +76,22 @@ def BlackBoxTransfer(trainingFeatures,
         'KNN' : make_pipeline(MinMaxScaler(), KNeighborsClassifier())
     }
 
+    print(f"Loading Pre-Trained target NN model")
+
+    targetNNModel = torch.load('trained_models/trained_NN_BlackBox.pt')
+    targetNNModel.eval()
+
+    targetModelDict['NN'] = targetNNModel
+
     print(f"Training the target models now.")
     print("================================================================================================================")
 
-    for targetModelName in modelTypeList:
-        if targetModelName == 'NN':
-            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device='cuda:0')
-            trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device='cuda:0')
-
-            data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
-            trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
-            
-            targetModel = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
-            targetModel.train()
-            targetModel.selfTrain(dataloader=trainDataLoader)
-
-        else:
-            targetModel = GridSearchCV(pipelines[targetModelName], 
-                                           hyperparameters[targetModelName],
-                                           cv=5,
-                                           n_jobs=-1) 
-            targetModel.fit(trainingFeatures, trainingLabels)
+    for targetModelName in targetModelList:
+        targetModel = GridSearchCV(pipelines[targetModelName], 
+                                   hyperparameters[targetModelName],
+                                   cv=5,
+                                   n_jobs=-1) 
+        targetModel.fit(trainingFeatures, trainingLabels)
 
         targetModelDict[targetModelName] = targetModel
         print(f"Target model {targetModelName} trained")
@@ -144,6 +140,8 @@ def BlackBoxTransfer(trainingFeatures,
         
         # Extracting labels for the training set from the target models
         if targetModelName == 'NN':
+            targetModel.eval()
+            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device=targetModel.device)
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
             newTrainingLabels = targetModel.predict(trainingFeatures)
@@ -151,13 +149,13 @@ def BlackBoxTransfer(trainingFeatures,
         # Training local models with labels provided by the target model
         for localModelName in modelTypeList:
             if localModelName == 'NN':
-                
                 localModel = DNN(input_shape=trainingFeaturesTensor.shape[1],
                                  output_shape=1, 
                                  attackMethod=NNAttackMethod)
 
                 if targetModelName == 'NN':
-                    data = CustomDataset(X=trainingFeaturesTensor, Y=torch.tensor(newTrainingLabels,dtype=torch.float32))
+                    data = CustomDataset(X=trainingFeaturesTensor, 
+                                         Y=torch.tensor(newTrainingLabels,dtype=torch.float32))
                 else:
                     newTrainingLabelsTensor = torch.tensor(newTrainingLabels, 
                                                            dtype=torch.float32,
@@ -181,7 +179,7 @@ def BlackBoxTransfer(trainingFeatures,
 
             localModelDict[localModelName] = localModel
 
-            print(f"Trained local model {localModelName} using labels provided by {targetModelName}")
+            print(f"Trained local model {localModelName} using labels provided by target model {targetModelName}")
 
         print("----------------------------------------------------------------------------------------------------------------")
         print(f"Testing the local models on the test set.")
@@ -285,7 +283,7 @@ def BlackBoxTransfer(trainingFeatures,
                 
                 # Selecting adversarial samples that fooled the local model to see if it fools the target model.
                 # Looking at how many and what percentage of those samples also fooled the target model
-                numAttacksTransferred = (targetModel.predict(advSuccTestFeatures) != advSuccTestFeaturesCorrectLabels).sum()
+                numAttacksTransferred = (targetModel.predict(advSuccTestFeatures) != advSuccTestFeaturesCorrectLabels).sum().item()
 
                 print(f"Accuracy of target model {targetModelName} on adversarial test set is {advTargetModelAccuracy * 100:.2f}%")
                 print(f"Number of attacks transferred from local model {localModelName} to target model {targetModelName} is {numAttacksTransferred}")
