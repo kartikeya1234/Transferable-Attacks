@@ -49,7 +49,6 @@ def BlackBoxTransfer(trainingFeatures,
     print("================================================================================================================")    
 
     modelTypeList = ['NN','KNN','SVM','LR','DT','GNB']
-    targetModelList = ['KNN','SVM','LR','DT','GNB']
     targetModelDict = {}
 
     hyperparameters = {
