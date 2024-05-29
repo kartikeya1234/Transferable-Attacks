@@ -2,7 +2,6 @@ from art.estimators.classification.scikitlearn import SklearnClassifier, Scikitl
 from art.attacks.evasion import HopSkipJump
 from art.attacks.evasion import DecisionTreeAttack
 
-from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.svm import SVC
@@ -14,6 +13,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 
 import numpy as np
+import pickle
 import torch
 from torch.utils.data import DataLoader
 
@@ -32,7 +32,17 @@ def BlackBoxTransfer(trainingFeatures,
                      testLabels,
                      scaler,
                      NNAttackMethod):
-    
+    """
+    Black Box Transfer
+
+    Args:
+        trainingFeatures (_type_): _description_
+        trainingLabels (_type_): _description_
+        testFeatures (_type_): _description_
+        testLabels (_type_): _description_
+        scaler (_type_): _description_
+        NNAttackMethod (_type_): _description_
+    """
 
     print("================================================================================================================")
     print(f"Conducting Black Box Transferability.")
@@ -76,27 +86,41 @@ def BlackBoxTransfer(trainingFeatures,
         'KNN' : make_pipeline(MinMaxScaler(), KNeighborsClassifier())
     }
 
-    print(f"Loading Pre-Trained target NN model")
+    print(f"Loading pretrained target models")
 
+    # Loading pre-trained target NN model
     targetNNModel = torch.load('trained_models/trained_NN_BlackBox.pt')
     targetNNModel.eval()
-
     targetModelDict['NN'] = targetNNModel
+    print(f"Pre-Trained target NN model loaded")
 
-    print(f"Training the target models now.")
+    # Loading pre-trained target SVM model
+    targetSVMModel = pickle.load(open('trained_models/trained_SVM_BlackBox.sav','rb'))
+    targetModelDict['SVM'] = targetSVMModel
+    print(f"Pre-Trained target SVM model loaded")
+
+    # Loading pre-trained target KNN model
+    targetKNNModel = pickle.load(open('trained_models/trained_KNN_BlackBox.sav','rb'))
+    targetModelDict['KNN'] = targetKNNModel
+    print(f"Pre-Trained target KNN model loaded")
+
+    # Loading pre-trained target LR model
+    targetLRModel = pickle.load(open('trained_models/trained_LR_BlackBox.sav','rb'))
+    targetModelDict['LR'] = targetLRModel
+    print(f"Pre-Trained target LR model loaded")
+
+    # Loading pre-trained target GNB model
+    targetGNBModel = pickle.load(open('trained_models/trained_GNB_BlackBox.sav','rb'))
+    targetModelDict['GNB'] = targetGNBModel
+    print(f"Pre-Trained target GNB model loaded")
+
+    # Loading pre-trained target DT model
+    targetDTModel = pickle.load(open('trained_models/trained_DT_BlackBox.sav','rb'))
+    targetModelDict['DT'] = targetDTModel
+    print(f"Pre-Trained target DT model loaded")
+
     print("================================================================================================================")
-
-    for targetModelName in targetModelList:
-        targetModel = GridSearchCV(pipelines[targetModelName], 
-                                   hyperparameters[targetModelName],
-                                   cv=5,
-                                   n_jobs=-1) 
-        targetModel.fit(trainingFeatures, trainingLabels)
-
-        targetModelDict[targetModelName] = targetModel
-        print(f"Target model {targetModelName} trained")
-
-    print(f"Testing the models now on the test set.")
+    print(f"Testing the target models now on the test set.")
     print("================================================================================================================")
     # Measuring the accuracies of the models on test set
 
@@ -141,7 +165,9 @@ def BlackBoxTransfer(trainingFeatures,
         # Extracting labels for the training set from the target models
         if targetModelName == 'NN':
             targetModel.eval()
-            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device=targetModel.device)
+            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures),
+                                                  dtype=torch.float32, 
+                                                  device=targetModel.device)
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
             newTrainingLabels = targetModel.predict(trainingFeatures)
@@ -163,7 +189,9 @@ def BlackBoxTransfer(trainingFeatures,
                     data = CustomDataset(X=trainingFeaturesTensor, 
                                          Y=newTrainingLabelsTensor)
 
-                trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
+                trainDataLoader = DataLoader(dataset=data, 
+                                             batch_size=24, 
+                                             shuffle=True)
                 localModel.train()
                 localModel.selfTrain(dataloader=trainDataLoader)
 
@@ -209,6 +237,7 @@ def BlackBoxTransfer(trainingFeatures,
         print("Conducting adversarial attacks on local models")
         print("----------------------------------------------------------------------------------------------------------------")
 
+        # Conducting adversarial attacks on the local models now
         for localModelName in localModelDict.keys():
             localModel = localModelDict[localModelName]
 
@@ -219,16 +248,18 @@ def BlackBoxTransfer(trainingFeatures,
                 elif localModelName == 'DT':
                     model = ScikitlearnDecisionTreeClassifier(model=localModel.best_estimator_)
 
+                # HopSkipJunp attack for all machine learning models except for Decision tree
                 if localModelName != 'DT':
                     attackMethod = HopSkipJump(classifier=model, 
-                                            targeted=False,
-                                            max_iter=10, 
-                                            max_eval=5000, 
-                                            verbose=True)
+                                               targeted=False,
+                                               max_iter=10, 
+                                               max_eval=5000, 
+                                               verbose=True)
                 
+                # Decision Tree attack from Papernot et al.
                 elif localModelName == 'DT':
                     attackMethod = DecisionTreeAttack(classifier=model, 
-                                                    offset=1)
+                                                      offset=1)
                 
                 # advAccuracy denotes the accuracy of a model on the adversarial samples
                 advTestFeatures = attackMethod.generate(x=testFeatures)
@@ -247,18 +278,20 @@ def BlackBoxTransfer(trainingFeatures,
 
             print(f"Accuracy of local model {localModelName} on adversarial test set is {advAccuracy * 100:.2f}%")
 
-            # How many attacks are being transferred to the target model 
+            # How many attacks, that are successful on local model, are being transferred to the target model 
             if targetModelName == 'NN':
                 if localModelName == 'NN':
                     advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
                     advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
 
                 else:
-                    advTestFeatures = torch.tensor(scaler.transform(advTestFeatures),dtype=torch.float32,device=targetModel.device)
-                    advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum()
+                    advTestFeatures = torch.tensor(scaler.transform(advTestFeatures),
+                                                   dtype=torch.float32,
+                                                   device=targetModel.device)
+                    advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
                     advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
 
-                # Selecting adversarial samples that fooled the local model to see if it fools the target model.
+                # Selecting adversarial samples that fooled the local model to see if it also fools the target model.
                 # Looking at how many and what percentage of those samples also fooled the target model
                 advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices]
                 advSuccTestFeaturesCorrectLabels = testLabelsTensor[advTestFeaturesIndices]
@@ -277,7 +310,8 @@ def BlackBoxTransfer(trainingFeatures,
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices.cpu().numpy()]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices.cpu().numpy()]
                 else:
-                    advTargetModelAccuracy = accuracy_score(y_true=testLabels, y_pred=targetModel.predict(advTestFeatures))
+                    advTargetModelAccuracy = accuracy_score(y_true=testLabels, 
+                                                            y_pred=targetModel.predict(advTestFeatures))
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices]
                 
