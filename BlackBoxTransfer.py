@@ -145,7 +145,7 @@ def BlackBoxTransfer(trainingFeatures,
             with torch.no_grad():
                 pred = targetModel(testFeaturesTensor)
                 
-                numCorrect = (pred.squeeze(1).round() == testLabelsTensor).sum()
+                numCorrect = (pred.squeeze(1).round() == testLabelsTensor).sum().item()
                 numSamples = testFeaturesTensor.shape[0]
 
             print(f"Accuracy for target model {targetModelName} on test set is {numCorrect/numSamples * 100:.2f}%")
@@ -161,14 +161,16 @@ def BlackBoxTransfer(trainingFeatures,
         localModelDict = {}
         targetModel = targetModelDict[targetModelName]
         
-        # Extracting labels for the training set from the target models
         if targetModelName == 'NN':
             targetModel.eval()
             trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures),
                                                   dtype=torch.float32, 
                                                   device=targetModel.device)
+            
+            # Extracting labels for the training set from the target model
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
+            # Extracting labels for the training set from the target model
             newTrainingLabels = targetModel.predict(trainingFeatures)
 
         # Training local models with labels provided by the target model
@@ -261,6 +263,7 @@ def BlackBoxTransfer(trainingFeatures,
                                                       offset=1)
                 
                 # advAccuracy denotes the accuracy of a model on the adversarial samples
+                # advTestFeaturesIndices denotes the indices of adversarial samples that were successful
                 advTestFeatures = attackMethod.generate(x=testFeatures)
                 advAccuracy = accuracy_score(y_true=testLabels, y_pred=localModel.predict(advTestFeatures))
                 advTestFeaturesIndices = localModel.predict(advTestFeatures) != testLabels
@@ -271,6 +274,7 @@ def BlackBoxTransfer(trainingFeatures,
                                                         Y=testLabelsTensor)
                 
                 # advAccuracy denotes the accuracy of a model on the adversarial samples
+                # advTestFeaturesIndices denotes the indices of adversarial samples that were successful
                 advAccuracy = (localModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
                 advAccuracy = advAccuracy / testLabelsTensor.shape[0]
                 advTestFeaturesIndices = localModel(advTestFeatures).round().squeeze(1) != testLabelsTensor
@@ -280,6 +284,8 @@ def BlackBoxTransfer(trainingFeatures,
             # How many attacks, that are successful on local model, are being transferred to the target model 
             if targetModelName == 'NN':
                 if localModelName == 'NN':
+                    
+                    # advTargetModelAccuracy denotes the accuracy of the target model on the adverarial samples
                     advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
                     advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
 
@@ -287,6 +293,8 @@ def BlackBoxTransfer(trainingFeatures,
                     advTestFeatures = torch.tensor(scaler.transform(advTestFeatures),
                                                    dtype=torch.float32,
                                                    device=targetModel.device)
+                    
+                    # advTargetModelAccuracy denotes the accuracy of the target model on the adverarial samples
                     advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
                     advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
 
