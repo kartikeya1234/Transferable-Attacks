@@ -121,8 +121,8 @@ def BlackBoxTransfer(trainingFeatures,
     print("================================================================================================================")
     print(f"Testing the target models now on the test set.")
     print("================================================================================================================")
-    # Measuring the accuracies of the models on test set
 
+    # Measuring the accuracies of the target models on test set
     for targetModelName in targetModelDict.keys():
         targetModel = targetModelDict[targetModelName]
 
@@ -161,12 +161,12 @@ def BlackBoxTransfer(trainingFeatures,
         localModelDict = {}
         targetModel = targetModelDict[targetModelName]
         
+        
         if targetModelName == 'NN':
             targetModel.eval()
             trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures),
                                                   dtype=torch.float32, 
                                                   device=targetModel.device)
-            
             # Extracting labels for the training set from the target model
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
@@ -262,10 +262,12 @@ def BlackBoxTransfer(trainingFeatures,
                     attackMethod = DecisionTreeAttack(classifier=model, 
                                                       offset=1)
                 
-                # advAccuracy denotes the accuracy of a model on the adversarial samples
-                # advTestFeaturesIndices denotes the indices of adversarial samples that were successful
+                # advAccuracy denotes the accuracy of a local model on the adversarial samples
+                # advTestFeaturesIndices denotes the indices of adversarial samples that were successful on the local model
                 advTestFeatures = attackMethod.generate(x=testFeatures)
-                advAccuracy = accuracy_score(y_true=testLabels, y_pred=localModel.predict(advTestFeatures))
+                corrPredTestFeaturesLocalModelIndices = localModel.predict(testFeatures) == testLabels
+                advAccuracy = accuracy_score(y_true=testLabels[corrPredTestFeaturesLocalModelIndices], 
+                                             y_pred=localModel.predict(advTestFeatures[corrPredTestFeaturesLocalModelIndices]))
                 advTestFeaturesIndices = localModel.predict(advTestFeatures) != testLabels
 
             else:
@@ -275,8 +277,9 @@ def BlackBoxTransfer(trainingFeatures,
                 
                 # advAccuracy denotes the accuracy of a model on the adversarial samples
                 # advTestFeaturesIndices denotes the indices of adversarial samples that were successful
-                advAccuracy = (localModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
-                advAccuracy = advAccuracy / testLabelsTensor.shape[0]
+                corrPredTestFeaturesLocalModelIndices = localModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
+                advAccuracy = (localModel(advTestFeatures[corrPredTestFeaturesLocalModelIndices]).round().squeeze(1) == testLabelsTensor[corrPredTestFeaturesLocalModelIndices]).sum().item()
+                advAccuracy = advAccuracy / testLabelsTensor[corrPredTestFeaturesLocalModelIndices].shape[0]
                 advTestFeaturesIndices = localModel(advTestFeatures).round().squeeze(1) != testLabelsTensor
 
             print(f"Accuracy of local model {localModelName} on adversarial test set is {advAccuracy * 100:.2f}%")
@@ -286,8 +289,9 @@ def BlackBoxTransfer(trainingFeatures,
                 if localModelName == 'NN':
                     
                     # advTargetModelAccuracy denotes the accuracy of the target model on the adverarial samples
-                    advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
-                    advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
+                    corrPredTestFeaturesTargetModelIndices = targetModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
+                    advTargetModelAccuracy = (targetModel(advTestFeatures[corrPredTestFeaturesTargetModelIndices]).round().squeeze(1) == testLabelsTensor[corrPredTestFeaturesTargetModelIndices]).sum().item()
+                    advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor[corrPredTestFeaturesTargetModelIndices].shape[0]
 
                 else:
                     advTestFeatures = torch.tensor(scaler.transform(advTestFeatures),
@@ -295,8 +299,9 @@ def BlackBoxTransfer(trainingFeatures,
                                                    device=targetModel.device)
                     
                     # advTargetModelAccuracy denotes the accuracy of the target model on the adverarial samples
-                    advTargetModelAccuracy = (targetModel(advTestFeatures).round().squeeze(1) == testLabelsTensor).sum().item()
-                    advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor.shape[0]
+                    corrPredTestFeaturesTargetModelIndices = targetModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
+                    advTargetModelAccuracy = (targetModel(advTestFeatures[corrPredTestFeaturesTargetModelIndices]).round().squeeze(1) == testLabelsTensor[corrPredTestFeaturesTargetModelIndices]).sum().item()
+                    advTargetModelAccuracy = advTargetModelAccuracy / testLabelsTensor[corrPredTestFeaturesTargetModelIndices].shape[0]
 
                 # Selecting adversarial samples that fooled the local model to see if it also fools the target model.
                 # Looking at how many and what percentage of those samples also fooled the target model
@@ -312,13 +317,16 @@ def BlackBoxTransfer(trainingFeatures,
             else:
                 if localModelName == 'NN':
                     advTestFeatures = scaler.inverse_transform(advTestFeatures.cpu().numpy())
-                    pred = targetModel.predict(advTestFeatures)
-                    advTargetModelAccuracy = accuracy_score(y_true=testLabels, y_pred=pred)  
+                    corrPredTestFeaturesTargetModelIndices = targetModel.predict(testFeatures) == testLabels
+                    pred = targetModel.predict(advTestFeatures[corrPredTestFeaturesTargetModelIndices])
+                    advTargetModelAccuracy = accuracy_score(y_true=testLabels[corrPredTestFeaturesTargetModelIndices], y_pred=pred)  
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices.cpu().numpy()]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices.cpu().numpy()]
                 else:
-                    advTargetModelAccuracy = accuracy_score(y_true=testLabels, 
-                                                            y_pred=targetModel.predict(advTestFeatures))
+                    corrPredTestFeaturesTargetModelIndices = targetModel.predict(testFeatures) == testLabels
+                    pred = targetModel.predict(advTestFeatures[corrPredTestFeaturesTargetModelIndices])
+                    advTargetModelAccuracy = accuracy_score(y_true=testLabels[corrPredTestFeaturesTargetModelIndices], 
+                                                            y_pred=pred)
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices]
                 
