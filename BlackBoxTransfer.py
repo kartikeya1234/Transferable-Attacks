@@ -48,7 +48,7 @@ def BlackBoxTransfer(trainingFeatures,
     print(f"Conducting Black Box Transferability.")
     print("================================================================================================================")    
 
-    modelTypeList = ['NN','KNN','SVM','LR','DT','GNB']
+    modelTypeList = ['KNN']
     targetModelDict = {}
 
     hyperparameters = {
@@ -229,7 +229,7 @@ def BlackBoxTransfer(trainingFeatures,
                 with torch.no_grad():
                     pred = localModel(testFeaturesTensor)
                     
-                    numCorrect = (pred.squeeze(1).round() == testLabelsTensor).sum()
+                    numCorrect = (pred.squeeze(1).round() == testLabelsTensor).sum().item()
                     numSamples = testFeaturesTensor.shape[0]
 
                 print(f"Accuracy of {localModelName} on test set is {numCorrect/numSamples * 100:.2f}%")
@@ -319,7 +319,8 @@ def BlackBoxTransfer(trainingFeatures,
                     advTestFeatures = scaler.inverse_transform(advTestFeatures.cpu().numpy())
                     corrPredTestFeaturesTargetModelIndices = targetModel.predict(testFeatures) == testLabels
                     pred = targetModel.predict(advTestFeatures[corrPredTestFeaturesTargetModelIndices])
-                    advTargetModelAccuracy = accuracy_score(y_true=testLabels[corrPredTestFeaturesTargetModelIndices], y_pred=pred)  
+                    advTargetModelAccuracy = accuracy_score(y_true=testLabels[corrPredTestFeaturesTargetModelIndices],
+                                                             y_pred=pred)  
                     advSuccTestFeaturesCorrectLabels = testLabels[advTestFeaturesIndices.cpu().numpy()]
                     advSuccTestFeatures = advTestFeatures[advTestFeaturesIndices.cpu().numpy()]
                 else:
@@ -362,6 +363,6 @@ if __name__ == '__main__':
                        testFeatures=X_test, 
                        testLabels=y_test, 
                        scaler=scaler, 
-                       NNAttackMethod='L1_MAD') 
+                       NNAttackMethod='SAIF') 
 
 
