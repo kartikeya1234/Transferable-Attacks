@@ -1,5 +1,5 @@
-torch==2.3.0
-scikit-learn==1.5.0
-pandas==2.2.2
-numpy==1.26.4
-adversarial-robustness-toolbox==1.17.1
+torch
+scikit-learn
+pandas
+numpy
+adversarial-robustness-toolbox

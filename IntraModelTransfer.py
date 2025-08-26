@@ -17,8 +17,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from models import DNN
-from CustomDataset import CustomDataset
+from Models.models import DNN
+from CustomDatasets.CustomDataset import CustomDataset
 
 import warnings
 warnings.filterwarnings('ignore')
