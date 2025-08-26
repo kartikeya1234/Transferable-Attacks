@@ -23,6 +23,15 @@ import warnings
 warnings.filterwarnings('ignore')
 
 torch.manual_seed(42)
+if torch.backends.mps.is_available():
+    device = torch.device('mps')
+    print("Using MPS device")
+elif torch.cuda.is_available():
+    device = torch.device('cuda')
+    print("Using CUDA device")
+else:
+    device = torch.device('cpu')
+    print("Using CPU device")
 
 
 def CrossModelTransfer(trainingFeatures, 
@@ -78,13 +87,13 @@ def CrossModelTransfer(trainingFeatures,
 
     for modelName in modelTypeList:
         if modelName == 'NN':
-            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device='cuda:0')
-            trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device='cuda:0')
+            trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures), dtype=torch.float32, device=device)
+            trainingLabelsTensor= torch.tensor(trainingLabels, dtype=torch.float32, device=device)
 
             data = CustomDataset(X=trainingFeaturesTensor, Y=trainingLabelsTensor)
             trainDataLoader = DataLoader(dataset=data, batch_size=24, shuffle=True)
             
-            model = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod)
+            model = DNN(input_shape=trainingFeaturesTensor.shape[1], output_shape=1, attackMethod=NNAttackMethod, device=device, ver=True)
             model.train()
             model.selfTrain(dataloader=trainDataLoader)
 
@@ -112,8 +121,8 @@ def CrossModelTransfer(trainingFeatures,
             print(f"Accuracy for {modelName} on test set is {accuracy * 100:.2f}%")
 
         else:
-            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32, device='cuda:0')
-            testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32, device='cuda:0')
+            testFeaturesTensor = torch.tensor(scaler.transform(testFeatures), dtype=torch.float32, device=device)
+            testLabelsTensor = torch.tensor(testLabels, dtype=torch.float32, device=device)
             
             model.eval()
 
@@ -198,10 +207,10 @@ def CrossModelTransfer(trainingFeatures,
 
                     # Selecting the adversarial counterpart of only those samples that are being correctly classified by the model
                     corrTestSamplesIndices = evalModel(testFeaturesTensor).round().squeeze(1) == testLabelsTensor
-                    advTestFeaturesTensor = torch.tensor(advTestFeatures, device='cuda:0')
+                    advTestFeaturesTensor = torch.tensor(advTestFeatures, device=device)
                     corrLabeledAdvTestFeatures = advTestFeaturesTensor[corrTestSamplesIndices]
                     corrTestLabels = testLabelsTensor[corrTestSamplesIndices]
-                    pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures.cpu().numpy()), dtype=torch.float32,device='cuda:0'))
+                    pred = evalModel(torch.tensor(scaler.transform(corrLabeledAdvTestFeatures.cpu().numpy()), dtype=torch.float32,device=device))
 
                 numCorrect = (pred.round().squeeze(1) != corrTestLabels).sum()
                 numSamples = corrLabeledAdvTestFeatures.shape[0]

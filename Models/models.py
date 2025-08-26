@@ -1,5 +1,5 @@
 import torch
-from attacks import SAIF, L1_MAD_attack
+from Attacks.attacks import SAIF, L1_MAD_attack
 
 class DNN(torch.nn.Module):
 
@@ -7,7 +7,7 @@ class DNN(torch.nn.Module):
                  input_shape,
                  output_shape, 
                  attackMethod='SAIF', 
-                 device='cuda:0',
+                 device=None,
                  ver=False):
 
         super().__init__()

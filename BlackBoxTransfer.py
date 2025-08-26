@@ -24,7 +24,15 @@ import warnings
 warnings.filterwarnings('ignore')
 
 torch.manual_seed(42)
-
+if torch.backends.mps.is_available():
+    device = torch.device('mps')
+    print("Using MPS device")
+elif torch.cuda.is_available():
+    device = torch.device('cuda')
+    print("Using CUDA device")
+else:
+    device = torch.device('cpu')
+    print("Using CPU device")
 
 def BlackBoxTransfer(trainingFeatures, 
                      trainingLabels,
@@ -88,7 +96,8 @@ def BlackBoxTransfer(trainingFeatures,
     print(f"Loading pretrained target models")
 
     # Loading pre-trained target NN model
-    targetNNModel = torch.load('trained_models/trained_NN_BlackBox.pt')
+    targetNNModel = torch.load('trained_models/trained_NN_BlackBox.pt', weights_only=False, map_location='cpu')
+    targetNNModel.to(device=device)
     targetNNModel.eval()
     targetModelDict['NN'] = targetNNModel
     print(f"Pre-Trained target NN model loaded")
@@ -135,10 +144,10 @@ def BlackBoxTransfer(trainingFeatures,
         else:
             testFeaturesTensor = torch.tensor(scaler.transform(testFeatures),
                                               dtype=torch.float32,
-                                              device=targetModel.device)
+                                              device=device)
             testLabelsTensor = torch.tensor(testLabels, 
                                             dtype=torch.float32,
-                                            device=targetModel.device)
+                                            device=device)
             
             targetModel.eval()
 
@@ -166,7 +175,7 @@ def BlackBoxTransfer(trainingFeatures,
             targetModel.eval()
             trainingFeaturesTensor = torch.tensor(scaler.transform(trainingFeatures),
                                                   dtype=torch.float32, 
-                                                  device=targetModel.device)
+                                                  device=device)
             # Extracting labels for the training set from the target model
             newTrainingLabels = targetModel(trainingFeaturesTensor).round().squeeze(1).detach()
         else:
